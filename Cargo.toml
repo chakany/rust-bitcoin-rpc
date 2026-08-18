@@ -1,0 +1,27 @@
+[package]
+name = "bitcoin-rpc"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "JSON-RPC client for Bitcoin Core v31.1, with sync and async implementations"
+keywords = ["bitcoin", "rpc", "jsonrpc", "bitcoind"]
+categories = ["api-bindings"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+ureq = { version = "3.4", default-features = false, optional = true }
+reqwest = { version = "0.13", default-features = false, optional = true }
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[features]
+default = []
+serde = ["dep:serde", "dep:serde_json"]
+sync = ["serde", "dep:ureq"]
+aio = ["serde", "dep:reqwest"]
+tls = ["ureq?/rustls", "reqwest?/rustls"]
