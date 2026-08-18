@@ -12,7 +12,8 @@ use crate::Result;
 use crate::params::positional;
 use crate::types::{
     Block, BlockHashAndHeight, BlockHeader, BlockWithTxs, ChainTip, DeploymentInfo,
-    GetBlockchainInfo, GetMempoolInfo, GetRawMempoolSequence, MempoolEntry, TxOut,
+    GetBlockchainInfo, GetMempoolInfo, GetNetTotals, GetNetworkInfo, GetRawMempoolSequence,
+    MempoolEntry, PeerInfo, TxOut,
 };
 
 /// Blockchain RPCs.
@@ -171,3 +172,53 @@ pub trait MempoolRpc: RpcCall {
 }
 
 impl<T: RpcCall + ?Sized> MempoolRpc for T {}
+
+/// Network RPCs.
+pub trait NetworkRpc: RpcCall {
+    /// Returns an object containing various state info regarding P2P
+    /// networking.
+    fn get_network_info(&self) -> Result<GetNetworkInfo> {
+        self.call("getnetworkinfo", positional(vec![]))
+    }
+
+    /// Returns data about each connected network peer as a json array of
+    /// objects.
+    fn get_peer_info(&self) -> Result<Vec<PeerInfo>> {
+        self.call("getpeerinfo", positional(vec![]))
+    }
+
+    /// Returns the number of connections to other nodes.
+    fn get_connection_count(&self) -> Result<u64> {
+        self.call("getconnectioncount", positional(vec![]))
+    }
+
+    /// Returns information about network traffic, including bytes in, bytes
+    /// out, and current system time.
+    fn get_net_totals(&self) -> Result<GetNetTotals> {
+        self.call("getnettotals", positional(vec![]))
+    }
+
+    /// Attempts to add or remove `node` from the addnode list, or try a
+    /// connection to it once.
+    ///
+    /// `command` is one of `"add"`, `"remove"` or `"onetry"`.
+    fn add_node(&self, node: &str, command: &str, v2transport: Option<bool>) -> Result<()> {
+        self.call(
+            "addnode",
+            positional(vec![json!(node), json!(command), json!(v2transport)]),
+        )
+    }
+
+    /// Immediately disconnects from the specified peer node.
+    ///
+    /// Strictly one of `address` and `node_id` can be provided to identify
+    /// the node.
+    fn disconnect_node(&self, address: Option<&str>, node_id: Option<u64>) -> Result<()> {
+        self.call(
+            "disconnectnode",
+            positional(vec![json!(address), json!(node_id)]),
+        )
+    }
+}
+
+impl<T: RpcCall + ?Sized> NetworkRpc for T {}

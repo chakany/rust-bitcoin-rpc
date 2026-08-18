@@ -16,7 +16,8 @@ use crate::Result;
 use crate::params::positional;
 use crate::types::{
     Block, BlockHashAndHeight, BlockHeader, BlockWithTxs, ChainTip, DeploymentInfo,
-    GetBlockchainInfo, GetMempoolInfo, GetRawMempoolSequence, MempoolEntry, TxOut,
+    GetBlockchainInfo, GetMempoolInfo, GetNetTotals, GetNetworkInfo, GetRawMempoolSequence,
+    MempoolEntry, PeerInfo, TxOut,
 };
 
 /// Blockchain RPCs.
@@ -191,3 +192,62 @@ pub trait MempoolRpc: RpcCallAsync {
 }
 
 impl<T: RpcCallAsync + ?Sized> MempoolRpc for T {}
+
+/// Network RPCs.
+pub trait NetworkRpc: RpcCallAsync {
+    /// Returns an object containing various state info regarding P2P
+    /// networking.
+    fn get_network_info(&self) -> impl Future<Output = Result<GetNetworkInfo>> + Send + '_ {
+        self.call("getnetworkinfo", positional(vec![]))
+    }
+
+    /// Returns data about each connected network peer as a json array of
+    /// objects.
+    fn get_peer_info(&self) -> impl Future<Output = Result<Vec<PeerInfo>>> + Send + '_ {
+        self.call("getpeerinfo", positional(vec![]))
+    }
+
+    /// Returns the number of connections to other nodes.
+    fn get_connection_count(&self) -> impl Future<Output = Result<u64>> + Send + '_ {
+        self.call("getconnectioncount", positional(vec![]))
+    }
+
+    /// Returns information about network traffic, including bytes in, bytes
+    /// out, and current system time.
+    fn get_net_totals(&self) -> impl Future<Output = Result<GetNetTotals>> + Send + '_ {
+        self.call("getnettotals", positional(vec![]))
+    }
+
+    /// Attempts to add or remove `node` from the addnode list, or try a
+    /// connection to it once.
+    ///
+    /// `command` is one of `"add"`, `"remove"` or `"onetry"`.
+    fn add_node(
+        &self,
+        node: &str,
+        command: &str,
+        v2transport: Option<bool>,
+    ) -> impl Future<Output = Result<()>> + Send + '_ {
+        self.call(
+            "addnode",
+            positional(vec![json!(node), json!(command), json!(v2transport)]),
+        )
+    }
+
+    /// Immediately disconnects from the specified peer node.
+    ///
+    /// Strictly one of `address` and `node_id` can be provided to identify
+    /// the node.
+    fn disconnect_node(
+        &self,
+        address: Option<&str>,
+        node_id: Option<u64>,
+    ) -> impl Future<Output = Result<()>> + Send + '_ {
+        self.call(
+            "disconnectnode",
+            positional(vec![json!(address), json!(node_id)]),
+        )
+    }
+}
+
+impl<T: RpcCallAsync + ?Sized> NetworkRpc for T {}

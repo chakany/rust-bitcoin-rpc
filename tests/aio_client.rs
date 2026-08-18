@@ -2,9 +2,11 @@
 
 mod common;
 
-use bitcoin_rpc::aio::{BlockchainRpc, ClientBuilder, MempoolRpc, RpcCallAsync, RpcCallAsyncExt};
+use bitcoin_rpc::aio::{
+    BlockchainRpc, ClientBuilder, MempoolRpc, NetworkRpc, RpcCallAsync, RpcCallAsyncExt,
+};
 use bitcoin_rpc::{Auth, Error};
-use common::fixtures::{BLOCK_WITH_TXS_REPLY, MEMPOOL_ENTRY_REPLY};
+use common::fixtures::{BLOCK_WITH_TXS_REPLY, MEMPOOL_ENTRY_REPLY, PEER_INFO_REPLY};
 use serde_json::json;
 
 #[tokio::test]
@@ -223,4 +225,61 @@ async fn get_raw_mempool_with_sequence_sends_verbose_false_and_sequence_true() {
     let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
     assert_eq!(sent["method"], "getrawmempool");
     assert_eq!(sent["params"], json!([false, true]));
+}
+
+#[tokio::test]
+async fn get_peer_info_sends_no_params_and_deserializes() {
+    let server = common::MockServer::spawn(vec![(200, PEER_INFO_REPLY.to_string())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let peers = client.get_peer_info().await.unwrap();
+    assert_eq!(peers.len(), 1);
+    let peer = &peers[0];
+    assert_eq!(peer.id, 7);
+    assert_eq!(peer.addr_bind.as_deref(), Some("10.0.0.1:8333"));
+    // A peer's clock can lag ours, so timeoffset is signed.
+    assert_eq!(peer.time_offset, -2);
+    assert_eq!(peer.presynced_headers, -1);
+    assert_eq!(peer.bytes_sent_per_msg.get("ping"), Some(&32));
+    assert_eq!(peer.bytes_recv_per_msg.get("pong"), Some(&32));
+    assert_eq!(peer.connection_type, "outbound-full-relay");
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "getpeerinfo");
+    assert_eq!(sent["params"], json!([]));
+}
+
+#[tokio::test]
+async fn disconnect_node_by_id_only_sends_leading_null_address() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":null}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    client.disconnect_node(None, Some(7)).await.unwrap();
+
+    // `address` is omitted but not trailing (nodeid follows), so it must stay
+    // an explicit null rather than being dropped.
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "disconnectnode");
+    assert_eq!(sent["params"], json!([null, 7]));
+}
+
+#[tokio::test]
+async fn add_node_omits_absent_v2transport() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":null}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    client
+        .add_node("192.168.0.6:8333", "onetry", None)
+        .await
+        .unwrap();
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "addnode");
+    assert_eq!(sent["params"], json!(["192.168.0.6:8333", "onetry"]));
 }

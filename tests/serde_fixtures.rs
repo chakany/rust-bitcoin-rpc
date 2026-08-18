@@ -555,3 +555,211 @@ fn get_raw_mempool_sequence_forward_compatible() {
     assert!(seq.txids.is_empty());
     assert_eq!(seq.mempool_sequence, 0);
 }
+
+#[test]
+fn get_network_info_full() {
+    let v = json!({
+        "version": 250000, "subversion": "/Satoshi:25.0.0/",
+        "protocolversion": 70016, "localservices": "0000000000000409",
+        "localservicesnames": ["NETWORK", "WITNESS"], "localrelay": true,
+        "timeoffset": 0, "connections": 10, "connections_in": 5,
+        "connections_out": 5, "networkactive": true,
+        "networks": [
+            {"name": "ipv4", "limited": false, "reachable": true, "proxy": "", "proxy_randomize_credentials": false},
+            {"name": "onion", "limited": true, "reachable": false, "proxy": "127.0.0.1:9050", "proxy_randomize_credentials": true}
+        ],
+        "relayfee": 0.00001000, "incrementalfee": 0.00001000,
+        "localaddresses": [
+            {"address": "1.2.3.4", "port": 8333, "score": 10}
+        ],
+        "warnings": ["This is a pre-release test build"]
+    });
+    let info: GetNetworkInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.version, 250000);
+    assert_eq!(info.protocol_version, 70016);
+    assert_eq!(info.local_services_names, vec!["NETWORK", "WITNESS"]);
+    assert_eq!(info.time_offset, 0);
+    assert_eq!(info.connections_in, 5);
+    assert_eq!(info.connections_out, 5);
+    assert_eq!(info.networks.len(), 2);
+    assert_eq!(info.networks[1].name, "onion");
+    assert!(info.networks[1].limited);
+    assert_eq!(info.networks[1].proxy, "127.0.0.1:9050");
+    assert!(info.networks[1].proxy_randomize_credentials);
+    // relayfee/incrementalfee are plain NUM in net.cpp, not STR_AMOUNT, but still f64.
+    assert_eq!(info.relay_fee, 0.00001000);
+    assert_eq!(info.incremental_fee, 0.00001000);
+    assert_eq!(info.local_addresses.len(), 1);
+    assert_eq!(info.local_addresses[0].address, "1.2.3.4");
+    assert_eq!(info.local_addresses[0].port, 8333);
+    assert_eq!(info.local_addresses[0].score, 10);
+    assert_eq!(
+        info.warnings,
+        vec!["This is a pre-release test build".to_string()]
+    );
+}
+
+#[test]
+fn get_network_info_minimal_and_forward_compatible() {
+    let v = json!({
+        "version": 250000, "subversion": "/Satoshi:25.0.0/",
+        "protocolversion": 70016, "localservices": "0000000000000000",
+        "localservicesnames": [], "localrelay": false,
+        // A peer clock behind ours yields a negative offset.
+        "timeoffset": -3, "connections": 0, "connections_in": 0,
+        "connections_out": 0, "networkactive": false,
+        "networks": [
+            {"name": "ipv4", "limited": true, "reachable": false, "proxy": "", "proxy_randomize_credentials": false}
+        ],
+        "relayfee": 0.0, "incrementalfee": 0.0,
+        "localaddresses": [],
+        "some_field_from_a_future_release": 1
+    });
+    let info: GetNetworkInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.time_offset, -3);
+    assert!(info.local_addresses.is_empty());
+    // `warnings` has no ARR in this fixture at all; `serde(default)` covers it.
+    assert!(info.warnings.is_empty());
+}
+
+#[test]
+fn peer_info_full() {
+    let v = json!({
+        "id": 7, "addr": "192.168.0.6:8333", "addrbind": "10.0.0.1:8333",
+        "addrlocal": "203.0.113.5:8333", "network": "ipv4", "mapped_as": 12345,
+        "services": "0000000000000409", "servicesnames": ["NETWORK", "WITNESS"],
+        "relaytxes": true, "last_inv_sequence": 42, "inv_to_send": 3,
+        "lastsend": 1690000100, "lastrecv": 1690000099,
+        "last_transaction": 1690000000, "last_block": 1689999000,
+        "bytessent": 123456, "bytesrecv": 654321, "conntime": 1689990000,
+        "timeoffset": -2, "pingtime": 0.05, "minping": 0.04, "pingwait": 0.01,
+        "version": 70016, "subver": "/Satoshi:25.0.0/", "inbound": false,
+        "bip152_hb_to": true, "bip152_hb_from": false,
+        "presynced_headers": -1, "synced_headers": 800000, "synced_blocks": 799999,
+        "inflight": [800001, 800002], "addr_relay_enabled": true,
+        "addr_processed": 100, "addr_rate_limited": 2,
+        "permissions": ["noban"], "minfeefilter": 0.00001000,
+        "bytessent_per_msg": {"ping": 32, "verack": 24},
+        "bytesrecv_per_msg": {"pong": 32},
+        "connection_type": "outbound-full-relay",
+        "transport_protocol_type": "v2", "session_id": "abcd1234"
+    });
+    let peer: PeerInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(peer.id, 7);
+    assert_eq!(peer.addr_bind.as_deref(), Some("10.0.0.1:8333"));
+    assert_eq!(peer.addr_local.as_deref(), Some("203.0.113.5:8333"));
+    assert_eq!(peer.mapped_as, Some(12345));
+    assert_eq!(peer.services_names, vec!["NETWORK", "WITNESS"]);
+    assert!(peer.relay_txes);
+    assert_eq!(peer.last_inv_sequence, 42);
+    assert_eq!(peer.inv_to_send, 3);
+    assert_eq!(peer.last_send, 1690000100);
+    assert_eq!(peer.last_recv, 1690000099);
+    assert_eq!(peer.bytes_sent, 123456);
+    assert_eq!(peer.bytes_recv, 654321);
+    assert_eq!(peer.conn_time, 1689990000);
+    // A peer's clock can lag ours, so timeoffset is signed.
+    assert_eq!(peer.time_offset, -2);
+    assert_eq!(peer.ping_time, Some(0.05));
+    assert_eq!(peer.min_ping, Some(0.04));
+    assert_eq!(peer.ping_wait, Some(0.01));
+    assert_eq!(peer.sub_ver, "/Satoshi:25.0.0/");
+    assert!(peer.bip152_hb_to);
+    assert!(!peer.bip152_hb_from);
+    // -1 means no low-work sync is currently in progress.
+    assert_eq!(peer.presynced_headers, -1);
+    assert_eq!(peer.synced_headers, 800000);
+    assert_eq!(peer.synced_blocks, 799999);
+    assert_eq!(peer.inflight, vec![800001, 800002]);
+    assert_eq!(peer.addr_processed, 100);
+    assert_eq!(peer.addr_rate_limited, 2);
+    assert_eq!(peer.permissions, vec!["noban"]);
+    assert_eq!(peer.min_fee_filter, 0.00001000);
+    assert_eq!(peer.bytes_sent_per_msg.get("ping"), Some(&32));
+    assert_eq!(peer.bytes_recv_per_msg.get("pong"), Some(&32));
+    assert_eq!(peer.connection_type, "outbound-full-relay");
+    assert_eq!(peer.transport_protocol_type, "v2");
+    assert_eq!(peer.session_id, "abcd1234");
+}
+
+#[test]
+fn peer_info_minimal_and_forward_compatible() {
+    // Every optional field absent, plus the deprecated `startingheight` field
+    // (present on a real node under -deprecatedrpc=startingheight) tolerated
+    // as an unknown extra since `PeerInfo` has no field for it.
+    let v = json!({
+        "id": 0, "addr": "10.0.0.2:8333", "network": "ipv4",
+        "services": "0000000000000000", "servicesnames": [],
+        "relaytxes": false, "last_inv_sequence": 0, "inv_to_send": 0,
+        "lastsend": 0, "lastrecv": 0, "last_transaction": 0, "last_block": 0,
+        "bytessent": 0, "bytesrecv": 0, "conntime": 0, "timeoffset": 0,
+        "version": 70016, "subver": "/Satoshi:25.0.0/", "inbound": true,
+        "bip152_hb_to": false, "bip152_hb_from": false,
+        "presynced_headers": -1, "synced_headers": -1, "synced_blocks": -1,
+        "inflight": [], "addr_relay_enabled": false,
+        "addr_processed": 0, "addr_rate_limited": 0,
+        "permissions": [], "minfeefilter": 0.0,
+        "bytessent_per_msg": {}, "bytesrecv_per_msg": {},
+        "connection_type": "inbound", "transport_protocol_type": "v1",
+        "session_id": "",
+        "startingheight": 800000,
+        "some_field_from_a_future_release": 1
+    });
+    let peer: PeerInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(peer.addr_bind, None);
+    assert_eq!(peer.addr_local, None);
+    assert_eq!(peer.mapped_as, None);
+    assert_eq!(peer.ping_time, None);
+    assert_eq!(peer.min_ping, None);
+    assert_eq!(peer.ping_wait, None);
+    // Right after connecting, before any header sync, these read -1.
+    assert_eq!(peer.presynced_headers, -1);
+    assert_eq!(peer.synced_headers, -1);
+    assert_eq!(peer.synced_blocks, -1);
+    assert!(peer.inflight.is_empty());
+    assert!(peer.permissions.is_empty());
+    assert!(peer.bytes_sent_per_msg.is_empty());
+    assert!(peer.bytes_recv_per_msg.is_empty());
+}
+
+#[test]
+fn get_net_totals_full() {
+    let v = json!({
+        "totalbytesrecv": 1000000, "totalbytessent": 2000000,
+        "timemillis": 1690000000000_i64,
+        "uploadtarget": {
+            "timeframe": 86400, "target": 5000000000_u64,
+            "target_reached": false, "serve_historical_blocks": true,
+            "bytes_left_in_cycle": 3000000000_u64, "time_left_in_cycle": 43200
+        }
+    });
+    let totals: GetNetTotals = serde_json::from_value(v).unwrap();
+    assert_eq!(totals.total_bytes_recv, 1000000);
+    assert_eq!(totals.total_bytes_sent, 2000000);
+    assert_eq!(totals.time_millis, 1690000000000);
+    assert_eq!(totals.upload_target.timeframe, 86400);
+    assert_eq!(totals.upload_target.target, 5000000000);
+    assert!(!totals.upload_target.target_reached);
+    assert!(totals.upload_target.serve_historical_blocks);
+    assert_eq!(totals.upload_target.bytes_left_in_cycle, 3000000000);
+    assert_eq!(totals.upload_target.time_left_in_cycle, 43200);
+}
+
+#[test]
+fn get_net_totals_forward_compatible() {
+    // Every field is required in `getnettotals`'s RPCResult, so this test's
+    // forward-compatibility burden falls entirely on the unknown field.
+    let v = json!({
+        "totalbytesrecv": 0, "totalbytessent": 0, "timemillis": 0,
+        "uploadtarget": {
+            "timeframe": 0, "target": 0, "target_reached": false,
+            "serve_historical_blocks": false, "bytes_left_in_cycle": 0,
+            "time_left_in_cycle": 0
+        },
+        "some_field_from_a_future_release": 1
+    });
+    let totals: GetNetTotals = serde_json::from_value(v).unwrap();
+    assert_eq!(totals.total_bytes_recv, 0);
+    assert_eq!(totals.upload_target.target, 0);
+    assert!(!totals.upload_target.target_reached);
+}
