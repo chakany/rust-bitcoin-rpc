@@ -55,7 +55,16 @@ pub struct GetBlockchainInfo {
     #[cfg_attr(feature = "serde", serde(default, rename = "signet_challenge"))]
     pub signet_challenge: Option<String>,
     /// Any network and blockchain warnings.
-    #[cfg_attr(feature = "serde", serde(default))]
+    ///
+    /// Accepts either the modern array wire form or the legacy bare-string
+    /// form emitted by a node run with `-deprecatedrpc=warnings`.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "crate::types::serde_helpers::string_or_seq_string"
+        )
+    )]
     pub warnings: Vec<String>,
 }
 

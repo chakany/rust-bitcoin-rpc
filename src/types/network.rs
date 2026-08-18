@@ -50,7 +50,16 @@ pub struct GetNetworkInfo {
     #[cfg_attr(feature = "serde", serde(rename = "localaddresses"))]
     pub local_addresses: Vec<LocalAddress>,
     /// Any network and blockchain warnings.
-    #[cfg_attr(feature = "serde", serde(default))]
+    ///
+    /// Accepts either the modern array wire form or the legacy bare-string
+    /// form emitted by a node run with `-deprecatedrpc=warnings`.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            default,
+            deserialize_with = "crate::types::serde_helpers::string_or_seq_string"
+        )
+    )]
     pub warnings: Vec<String>,
 }
 

@@ -53,6 +53,24 @@ fn get_blockchain_info_minimal_and_forward_compatible() {
 }
 
 #[test]
+fn get_blockchain_info_warnings_legacy_string_form() {
+    // A node run with `-deprecatedrpc=warnings` emits a bare string instead of
+    // an array; ruling R25 requires both wire shapes to deserialize.
+    let v = json!({
+        "chain": "main", "blocks": 800000, "headers": 800000,
+        "bestblockhash": "0000000000000000000",
+        "bits": "17034219", "target": "000000000000000000034219",
+        "difficulty": 53911173001054.59, "time": 1690000000,
+        "mediantime": 1689999000, "verificationprogress": 0.9999,
+        "initialblockdownload": false, "chainwork": "00000000000000abc",
+        "size_on_disk": 570000000000_u64, "pruned": false,
+        "warnings": "single legacy warning"
+    });
+    let info: GetBlockchainInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.warnings, vec!["single legacy warning"]);
+}
+
+#[test]
 fn block_header_full() {
     let v = json!({
         "hash": "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09",
@@ -620,6 +638,25 @@ fn get_network_info_minimal_and_forward_compatible() {
     assert!(info.local_addresses.is_empty());
     // `warnings` has no ARR in this fixture at all; `serde(default)` covers it.
     assert!(info.warnings.is_empty());
+}
+
+#[test]
+fn get_network_info_warnings_legacy_string_form() {
+    // A node run with `-deprecatedrpc=warnings` emits a bare string instead of
+    // an array; ruling R25 requires both wire shapes to deserialize.
+    let v = json!({
+        "version": 250000, "subversion": "/Satoshi:25.0.0/",
+        "protocolversion": 70016, "localservices": "0000000000000000",
+        "localservicesnames": [], "localrelay": false,
+        "timeoffset": 0, "connections": 0, "connections_in": 0,
+        "connections_out": 0, "networkactive": false,
+        "networks": [],
+        "relayfee": 0.0, "incrementalfee": 0.0,
+        "localaddresses": [],
+        "warnings": "single legacy warning"
+    });
+    let info: GetNetworkInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.warnings, vec!["single legacy warning"]);
 }
 
 #[test]
