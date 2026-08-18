@@ -19,5 +19,8 @@ pub mod types;
 #[cfg(feature = "sync")]
 pub mod sync;
 
+#[cfg(feature = "aio")]
+pub mod aio;
+
 pub use error::{Error, RpcError, Result};
 pub use auth::Auth;
