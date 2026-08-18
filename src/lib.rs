@@ -24,3 +24,36 @@ pub mod aio;
 
 pub use auth::Auth;
 pub use error::{Error, Result, RpcError};
+
+/// Everything you normally want in scope.
+///
+/// The sync and async method traits share names, so importing both preludes'
+/// worth of traits at once is ambiguous by design — import
+/// `prelude::sync::*` or `prelude::aio::*` when both features are on.
+pub mod prelude {
+    /// Blocking traits.
+    #[cfg(feature = "sync")]
+    pub mod sync {
+        pub use crate::sync::{
+            BlockchainRpc, ControlRpc, FeeRpc, MempoolRpc, MiningRpc, NetworkRpc,
+            RawTransactionsRpc, RpcCall, RpcCallExt, UtilRpc,
+        };
+    }
+
+    /// Async traits.
+    #[cfg(feature = "aio")]
+    pub mod aio {
+        pub use crate::aio::{
+            BlockchainRpc, ControlRpc, FeeRpc, MempoolRpc, MiningRpc, NetworkRpc,
+            RawTransactionsRpc, RpcCallAsync, RpcCallAsyncExt, UtilRpc,
+        };
+    }
+
+    pub use crate::{Auth, Error, Result, RpcError};
+
+    #[cfg(all(feature = "sync", not(feature = "aio")))]
+    pub use sync::*;
+
+    #[cfg(all(feature = "aio", not(feature = "sync")))]
+    pub use aio::*;
+}
