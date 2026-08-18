@@ -213,7 +213,17 @@ fn block_with_txs_full() {
                 "txid": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
                 "hash": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
                 "version": 1, "size": 204, "vsize": 204, "weight": 816, "locktime": 0,
-                "vin": [], "vout": [], "hex": "0100000001",
+                "vin": [{ "coinbase": "04ffff001d0102", "sequence": 4294967295_u64 }],
+                "vout": [{
+                    "value": 50.0, "n": 0,
+                    "scriptPubKey": {
+                        "asm": "04678afdb0 OP_CHECKSIG",
+                        "desc": "pk(04678afdb0)#checksum",
+                        "hex": "4104678afdb0ac",
+                        "type": "pubkey"
+                    }
+                }],
+                "hex": "0100000001",
                 "fee": 0.00012345
             }
         ],
@@ -229,6 +239,22 @@ fn block_with_txs_full() {
     assert_eq!(block.tx.len(), 1);
     // `fee` is a JSON number even though Core documents it as STR_AMOUNT.
     assert_eq!(block.tx[0].fee, Some(0.00012345));
+    // Reached *through* the flattened `tx`: proves `serde(flatten)` really
+    // routes the sibling keys into `Transaction` instead of dropping them.
+    assert_eq!(
+        block.tx[0].tx.txid,
+        "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"
+    );
+    assert_eq!(block.tx[0].tx.vsize, 204);
+    assert_eq!(
+        block.tx[0].tx.vin[0].coinbase.as_deref(),
+        Some("04ffff001d0102")
+    );
+    assert_eq!(block.tx[0].tx.vout[0].value, 50.0);
+    assert_eq!(block.tx[0].tx.vout[0].script_pub_key.script_type, "pubkey");
+    // `getblock` calls `TxToUniv` with a null block hash, so no block context.
+    assert_eq!(block.tx[0].tx.block_hash, None);
+    assert_eq!(block.tx[0].tx.confirmations, None);
     assert!(block.previous_block_hash.is_some());
 }
 
@@ -240,7 +266,11 @@ fn block_with_txs_minimal_and_forward_compatible() {
         "coinbase_tx": { "version": 1, "locktime": 0, "sequence": 4294967295_u64, "coinbase": "51" },
         "height": 0, "version": 1, "versionHex": "00000001",
         "merkleroot": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
-        "tx": [{ "txid": "4a5e1e", "vin": [], "vout": [] }],
+        "tx": [{
+            "txid": "4a5e1e", "hash": "4a5e1e",
+            "version": 1, "size": 204, "vsize": 204, "weight": 816, "locktime": 0,
+            "vin": [], "vout": []
+        }],
         "time": 1296688602, "mediantime": 1296688602, "nonce": 2,
         "bits": "207fffff", "target": "7fffff0000000000",
         "difficulty": 4.656542373871732e-10, "chainwork": "02", "nTx": 1,
@@ -250,6 +280,9 @@ fn block_with_txs_minimal_and_forward_compatible() {
     assert_eq!(block.tx.len(), 1);
     // Blocks whose undo data is unavailable (e.g. pruned) carry no per-tx fee.
     assert_eq!(block.tx[0].fee, None);
+    assert_eq!(block.tx[0].tx.hash, "4a5e1e");
+    assert_eq!(block.tx[0].tx.weight, 816);
+    assert!(block.tx[0].tx.vin.is_empty());
     assert_eq!(block.next_block_hash, None);
 }
 
@@ -1006,4 +1039,246 @@ fn get_net_totals_forward_compatible() {
     assert_eq!(totals.total_bytes_recv, 0);
     assert_eq!(totals.upload_target.target, 0);
     assert!(!totals.upload_target.target_reached);
+}
+
+#[test]
+fn transaction_verbose_full() {
+    // `getrawtransaction` verbosity 2 output: every optional field present,
+    // including the `prevout` that only undo data can supply.
+    let v = json!({
+        "in_active_chain": true,
+        "txid": "9e1a2d3f4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6",
+        "hash": "1f2e3d4c5b6a798807162534435261708f9e0d1c2b3a4958475664738291a0b1",
+        "version": 2, "size": 226, "vsize": 144, "weight": 574,
+        "locktime": 800000,
+        "vin": [
+            {
+                "txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+                "vout": 1,
+                "scriptSig": { "asm": "3045022100[ALL] 03a1b2", "hex": "483045022100" },
+                "txinwitness": ["3045022100", "03a1b2"],
+                "prevout": {
+                    "generated": false,
+                    "height": 799999,
+                    "value": 0.05,
+                    "scriptPubKey": {
+                        "asm": "0 abcdef01",
+                        "desc": "addr(bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4)#8rar0j5g",
+                        "hex": "0014abcdef01",
+                        "address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+                        "type": "witness_v0_keyhash"
+                    }
+                },
+                "sequence": 4294967293_u64
+            }
+        ],
+        "vout": [
+            {
+                "value": 0.04998,
+                "n": 0,
+                "scriptPubKey": {
+                    "asm": "OP_DUP OP_HASH160 abcdef01 OP_EQUALVERIFY OP_CHECKSIG",
+                    "desc": "pkh(03a1b2)#checksum",
+                    "hex": "76a914abcdef0188ac",
+                    "address": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
+                    "type": "pubkeyhash"
+                }
+            }
+        ],
+        "hex": "0200000001abcdef",
+        "blockhash": "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054",
+        "confirmations": 12,
+        "time": 1690000000,
+        "blocktime": 1690000000
+    });
+    let tx: Transaction = serde_json::from_value(v).unwrap();
+    assert_eq!(tx.in_active_chain, Some(true));
+    assert_eq!(tx.vsize, 144);
+    assert_eq!(tx.locktime, 800000);
+    assert_eq!(tx.confirmations, Some(12));
+    assert_eq!(tx.block_time, Some(1690000000));
+    assert_eq!(tx.hex.as_deref(), Some("0200000001abcdef"));
+
+    assert_eq!(tx.vin.len(), 1);
+    let vin = &tx.vin[0];
+    assert_eq!(vin.coinbase, None);
+    assert_eq!(vin.vout, Some(1));
+    assert_eq!(vin.sequence, 4294967293);
+    assert_eq!(
+        vin.script_sig.as_ref().unwrap().hex,
+        "483045022100".to_string()
+    );
+    assert_eq!(
+        vin.tx_in_witness.as_deref(),
+        Some(["3045022100".to_string(), "03a1b2".to_string()].as_slice())
+    );
+    let prevout = vin.prevout.as_ref().unwrap();
+    assert!(!prevout.generated);
+    assert_eq!(prevout.height, 799999);
+    // `value` goes through `ValueFromAmount`, so it arrives as a JSON number.
+    assert_eq!(prevout.value, 0.05);
+    assert_eq!(prevout.script_pub_key.script_type, "witness_v0_keyhash");
+
+    assert_eq!(tx.vout.len(), 1);
+    assert_eq!(tx.vout[0].value, 0.04998);
+    assert_eq!(tx.vout[0].n, 0);
+    assert_eq!(tx.vout[0].script_pub_key.script_type, "pubkeyhash");
+    assert_eq!(
+        tx.vout[0].script_pub_key.address.as_deref(),
+        Some("1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH")
+    );
+    assert_eq!(tx.vout[0].script_pub_key.desc, "pkh(03a1b2)#checksum");
+}
+
+#[test]
+fn transaction_minimal_and_forward_compatible() {
+    // `decoderawtransaction` output for a coinbase transaction: no block
+    // context, no `hex` (Core passes `include_hex=false`), a `vin` with only
+    // `coinbase`/`sequence` and a `scriptPubKey` with no well-defined address.
+    let v = json!({
+        "txid": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
+        "hash": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
+        "version": 1, "size": 204, "vsize": 204, "weight": 816, "locktime": 0,
+        "vin": [
+            { "coinbase": "04ffff001d0102", "sequence": 4294967295_u64 }
+        ],
+        "vout": [
+            {
+                "value": 50.0,
+                "n": 0,
+                "scriptPubKey": {
+                    "asm": "04678afdb0 OP_CHECKSIG",
+                    "desc": "pk(04678afdb0)#checksum",
+                    "hex": "4104678afdb0ac",
+                    "type": "pubkey",
+                    "some_nested_field_from_a_future_release": true
+                }
+            }
+        ],
+        "some_field_from_a_future_release": 1
+    });
+    let tx: Transaction = serde_json::from_value(v).unwrap();
+    assert_eq!(tx.in_active_chain, None);
+    assert_eq!(tx.hex, None);
+    assert_eq!(tx.block_hash, None);
+    assert_eq!(tx.confirmations, None);
+    assert_eq!(tx.time, None);
+    assert_eq!(tx.block_time, None);
+    assert_eq!(tx.vin[0].coinbase.as_deref(), Some("04ffff001d0102"));
+    assert_eq!(tx.vin[0].txid, None);
+    assert_eq!(tx.vin[0].vout, None);
+    assert_eq!(tx.vin[0].script_sig, None);
+    assert_eq!(tx.vin[0].tx_in_witness, None);
+    assert_eq!(tx.vin[0].prevout, None);
+    assert_eq!(tx.vout[0].value, 50.0);
+    assert_eq!(tx.vout[0].script_pub_key.script_type, "pubkey");
+    assert_eq!(tx.vout[0].script_pub_key.address, None);
+}
+
+#[test]
+fn test_mempool_accept_result_full() {
+    let v = json!({
+        "txid": "9e1a2d3f4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6",
+        "wtxid": "1f2e3d4c5b6a798807162534435261708f9e0d1c2b3a4958475664738291a0b1",
+        "package-error": "package-not-child-with-unconfirmed-parents",
+        "allowed": true,
+        "vsize": 144,
+        "fees": {
+            "base": 0.00001234,
+            "effective-feerate": 0.00008567,
+            "effective-includes": [
+                "1f2e3d4c5b6a798807162534435261708f9e0d1c2b3a4958475664738291a0b1"
+            ],
+            "some_nested_field_from_a_future_release": 1
+        },
+        "reject-reason": "max-fee-exceeded",
+        "reject-details": "max-fee-exceeded, tx feerate too high"
+    });
+    let result: TestMempoolAcceptResult = serde_json::from_value(v).unwrap();
+    assert_eq!(result.allowed, Some(true));
+    assert_eq!(result.vsize, Some(144));
+    assert_eq!(
+        result.package_error.as_deref(),
+        Some("package-not-child-with-unconfirmed-parents")
+    );
+    assert_eq!(result.reject_reason.as_deref(), Some("max-fee-exceeded"));
+    assert!(result.reject_details.is_some());
+    let fees = result.fees.as_ref().unwrap();
+    // Both are STR_AMOUNT, i.e. JSON numbers.
+    assert_eq!(fees.base, 0.00001234);
+    assert_eq!(fees.effective_feerate, 0.00008567);
+    assert_eq!(fees.effective_includes.len(), 1);
+    assert_eq!(
+        fees.effective_includes[0],
+        "1f2e3d4c5b6a798807162534435261708f9e0d1c2b3a4958475664738291a0b1"
+    );
+}
+
+#[test]
+fn test_mempool_accept_result_minimal_and_forward_compatible() {
+    // Validation left unfinished by a failure in another transaction of the
+    // package: only the two hashes are returned.
+    let v = json!({
+        "txid": "9e1a2d3f4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6",
+        "wtxid": "1f2e3d4c5b6a798807162534435261708f9e0d1c2b3a4958475664738291a0b1",
+        "some_field_from_a_future_release": 1
+    });
+    let result: TestMempoolAcceptResult = serde_json::from_value(v).unwrap();
+    assert_eq!(
+        result.txid,
+        "9e1a2d3f4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6"
+    );
+    assert_eq!(result.package_error, None);
+    assert_eq!(result.allowed, None);
+    assert_eq!(result.vsize, None);
+    assert_eq!(result.fees, None);
+    assert_eq!(result.reject_reason, None);
+    assert_eq!(result.reject_details, None);
+}
+
+#[test]
+fn create_raw_transaction_input_omits_an_absent_sequence() {
+    let with_sequence = CreateRawTransactionInput {
+        txid: "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b".to_string(),
+        vout: 1,
+        sequence: Some(4294967293),
+    };
+    assert_eq!(
+        serde_json::to_value(&with_sequence).unwrap(),
+        json!({
+            "txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+            "vout": 1,
+            "sequence": 4294967293_u64
+        })
+    );
+
+    let without = CreateRawTransactionInput {
+        sequence: None,
+        ..with_sequence
+    };
+    assert_eq!(
+        serde_json::to_value(&without).unwrap(),
+        json!({
+            "txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+            "vout": 1
+        })
+    );
+}
+
+#[test]
+fn create_raw_transaction_output_serializes_the_address_as_the_key() {
+    let pay = CreateRawTransactionOutput::Address {
+        address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
+        amount: 0.01,
+    };
+    assert_eq!(
+        serde_json::to_value(&pay).unwrap(),
+        json!({ "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4": 0.01 })
+    );
+
+    let data = CreateRawTransactionOutput::Data("00010203".to_string());
+    assert_eq!(
+        serde_json::to_value(&data).unwrap(),
+        json!({ "data": "00010203" })
+    );
 }

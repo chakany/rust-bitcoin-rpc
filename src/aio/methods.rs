@@ -16,8 +16,9 @@ use crate::Result;
 use crate::params::positional;
 use crate::types::{
     Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest, BlockWithTxs,
-    ChainTip, DeploymentInfo, GetBlockchainInfo, GetMempoolInfo, GetMiningInfo, GetNetTotals,
-    GetNetworkInfo, GetRawMempoolSequence, MempoolEntry, PeerInfo, TxOut,
+    ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput, DeploymentInfo,
+    GetBlockchainInfo, GetMempoolInfo, GetMiningInfo, GetNetTotals, GetNetworkInfo,
+    GetRawMempoolSequence, MempoolEntry, PeerInfo, TestMempoolAcceptResult, Transaction, TxOut,
 };
 
 /// Blockchain RPCs.
@@ -55,8 +56,9 @@ pub trait BlockchainRpc: RpcCallAsync {
         self.call("getblock", positional(vec![json!(hash), json!(1)]))
     }
 
-    /// Returns information about the block `hash` and about each of its
-    /// transactions.
+    /// Returns information about the block `hash` and, for each of its
+    /// transactions, the full body `getrawtransaction` would return plus the
+    /// transaction's fee when the block's undo data is available.
     fn get_block_with_txs(
         &self,
         hash: &str,
@@ -269,8 +271,8 @@ pub trait MiningRpc: RpcCallAsync {
         &self,
         request: &BlockTemplateRequest,
     ) -> impl Future<Output = Result<BlockTemplate>> + Send + '_ {
-        // Serialize eagerly so a request that cannot be encoded errors here
-        // rather than on the first poll of the returned future.
+        // `?` is unusable in a non-async fn, so encode here and carry the
+        // Result into the block; the encoding error surfaces on first poll.
         let params = serde_json::to_value(request).map(|v| positional(vec![v]));
         async move { self.call("getblocktemplate", params?).await }
     }
@@ -307,3 +309,124 @@ pub trait MiningRpc: RpcCallAsync {
 }
 
 impl<T: RpcCallAsync + ?Sized> MiningRpc for T {}
+
+/// Raw transaction RPCs.
+pub trait RawTransactionsRpc: RpcCallAsync {
+    /// Returns the serialized, hex-encoded data for `txid`.
+    ///
+    /// By default the node only looks in the mempool; `-txindex` extends the
+    /// search to every block, and `block_hash` restricts it to one block.
+    fn get_raw_transaction_hex(
+        &self,
+        txid: &str,
+        block_hash: Option<&str>,
+    ) -> impl Future<Output = Result<String>> + Send + '_ {
+        self.call(
+            "getrawtransaction",
+            positional(vec![json!(txid), json!(0), json!(block_hash)]),
+        )
+    }
+
+    /// Returns information about the transaction `txid`.
+    ///
+    /// By default the node only looks in the mempool; `-txindex` extends the
+    /// search to every block, and `block_hash` restricts it to one block.
+    /// Verbosity 1 is requested, so the result carries no `prevout` detail.
+    fn get_raw_transaction(
+        &self,
+        txid: &str,
+        block_hash: Option<&str>,
+    ) -> impl Future<Output = Result<Transaction>> + Send + '_ {
+        self.call(
+            "getrawtransaction",
+            positional(vec![json!(txid), json!(1), json!(block_hash)]),
+        )
+    }
+
+    /// Submits the raw transaction `hex` to the network and returns its hash.
+    ///
+    /// `max_fee_rate` rejects the transaction if its fee rate is higher, in
+    /// BTC/kvB; `0` accepts any fee rate. `max_burn_amount` rejects it if it has
+    /// provably unspendable outputs worth more than that, in BTC.
+    fn send_raw_transaction(
+        &self,
+        hex: &str,
+        max_fee_rate: Option<f64>,
+        max_burn_amount: Option<f64>,
+    ) -> impl Future<Output = Result<String>> + Send + '_ {
+        self.call(
+            "sendrawtransaction",
+            positional(vec![
+                json!(hex),
+                json!(max_fee_rate),
+                json!(max_burn_amount),
+            ]),
+        )
+    }
+
+    /// Creates an unsigned transaction spending `inputs` and creating
+    /// `outputs`, and returns it hex-encoded.
+    ///
+    /// The transaction is neither signed, nor stored in a wallet, nor
+    /// transmitted to the network. `replaceable` marks it BIP 125-replaceable
+    /// and defaults to `true` on the node; `version` defaults to
+    /// `CTransaction::CURRENT_VERSION` and must be within the standard range
+    /// the node accepts.
+    fn create_raw_transaction(
+        &self,
+        inputs: &[CreateRawTransactionInput],
+        outputs: &[CreateRawTransactionOutput],
+        locktime: Option<u32>,
+        replaceable: Option<bool>,
+        version: Option<u32>,
+    ) -> impl Future<Output = Result<String>> + Send + '_ {
+        // `?` is unusable in a non-async fn, so encode here and carry the
+        // Result into the block; the encoding error surfaces on first poll.
+        let params = serde_json::to_value(inputs).and_then(|inputs| {
+            serde_json::to_value(outputs).map(|outputs| {
+                positional(vec![
+                    inputs,
+                    outputs,
+                    json!(locktime),
+                    json!(replaceable),
+                    json!(version),
+                ])
+            })
+        });
+        async move { self.call("createrawtransaction", params?).await }
+    }
+
+    /// Decodes the serialized, hex-encoded transaction `hex`.
+    ///
+    /// `iswitness` says whether `hex` is a witness serialization; omitting it
+    /// lets the node decide heuristically.
+    fn decode_raw_transaction(
+        &self,
+        hex: &str,
+        iswitness: Option<bool>,
+    ) -> impl Future<Output = Result<Transaction>> + Send + '_ {
+        self.call(
+            "decoderawtransaction",
+            positional(vec![json!(hex), json!(iswitness)]),
+        )
+    }
+
+    /// Returns whether each of `raw_txs` would be accepted by the mempool,
+    /// in the order they were given.
+    ///
+    /// More than one transaction is tested as a package, so parents must come
+    /// before children. `max_fee_rate` rejects a transaction whose fee rate is
+    /// higher, in BTC/kvB.
+    fn test_mempool_accept(
+        &self,
+        raw_txs: &[String],
+        max_fee_rate: Option<f64>,
+    ) -> impl Future<Output = Result<Vec<TestMempoolAcceptResult>>> + Send + '_ {
+        self.call(
+            "testmempoolaccept",
+            positional(vec![json!(raw_txs), json!(max_fee_rate)]),
+        )
+    }
+}
+
+impl<T: RpcCallAsync + ?Sized> RawTransactionsRpc for T {}

@@ -6,6 +6,8 @@
 
 use std::collections::BTreeMap;
 
+use super::rawtx::Transaction;
+
 /// Result of `getblockchaininfo`.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -198,11 +200,15 @@ pub struct Block {
 /// One element of the `tx` array of a `getblock` verbosity-2 result.
 ///
 /// Core documents these elements as an elision — "the transactions in the format
-/// of the `getrawtransaction` RPC" — plus a `fee`. Only `fee` is modelled here;
-/// use `getrawtransaction` for the full transaction body.
+/// of the `getrawtransaction` RPC" (`blockchain.cpp:818`) — plus a `fee`, so the
+/// transaction body is [`Transaction`], flattened in. The flatten is safe
+/// because `Transaction` declares no `fee` of its own.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BlockTransaction {
+    /// The transaction, in the same format `getrawtransaction` returns.
+    #[cfg_attr(feature = "serde", serde(flatten))]
+    pub tx: Transaction,
     /// The transaction fee in BTC. Omitted if block undo data is not available.
     #[cfg_attr(feature = "serde", serde(default))]
     pub fee: Option<f64>,

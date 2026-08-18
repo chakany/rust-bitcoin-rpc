@@ -12,8 +12,9 @@ use crate::Result;
 use crate::params::positional;
 use crate::types::{
     Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest, BlockWithTxs,
-    ChainTip, DeploymentInfo, GetBlockchainInfo, GetMempoolInfo, GetMiningInfo, GetNetTotals,
-    GetNetworkInfo, GetRawMempoolSequence, MempoolEntry, PeerInfo, TxOut,
+    ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput, DeploymentInfo,
+    GetBlockchainInfo, GetMempoolInfo, GetMiningInfo, GetNetTotals, GetNetworkInfo,
+    GetRawMempoolSequence, MempoolEntry, PeerInfo, TestMempoolAcceptResult, Transaction, TxOut,
 };
 
 /// Blockchain RPCs.
@@ -51,8 +52,9 @@ pub trait BlockchainRpc: RpcCall {
         self.call("getblock", positional(vec![json!(hash), json!(1)]))
     }
 
-    /// Returns information about the block `hash` and about each of its
-    /// transactions.
+    /// Returns information about the block `hash` and, for each of its
+    /// transactions, the full body `getrawtransaction` would return plus the
+    /// transaction's fee when the block's undo data is available.
     fn get_block_with_txs(&self, hash: &str) -> Result<BlockWithTxs> {
         self.call("getblock", positional(vec![json!(hash), json!(2)]))
     }
@@ -271,3 +273,108 @@ pub trait MiningRpc: RpcCall {
 }
 
 impl<T: RpcCall + ?Sized> MiningRpc for T {}
+
+/// Raw transaction RPCs.
+pub trait RawTransactionsRpc: RpcCall {
+    /// Returns the serialized, hex-encoded data for `txid`.
+    ///
+    /// By default the node only looks in the mempool; `-txindex` extends the
+    /// search to every block, and `block_hash` restricts it to one block.
+    fn get_raw_transaction_hex(&self, txid: &str, block_hash: Option<&str>) -> Result<String> {
+        self.call(
+            "getrawtransaction",
+            positional(vec![json!(txid), json!(0), json!(block_hash)]),
+        )
+    }
+
+    /// Returns information about the transaction `txid`.
+    ///
+    /// By default the node only looks in the mempool; `-txindex` extends the
+    /// search to every block, and `block_hash` restricts it to one block.
+    /// Verbosity 1 is requested, so the result carries no `prevout` detail.
+    fn get_raw_transaction(&self, txid: &str, block_hash: Option<&str>) -> Result<Transaction> {
+        self.call(
+            "getrawtransaction",
+            positional(vec![json!(txid), json!(1), json!(block_hash)]),
+        )
+    }
+
+    /// Submits the raw transaction `hex` to the network and returns its hash.
+    ///
+    /// `max_fee_rate` rejects the transaction if its fee rate is higher, in
+    /// BTC/kvB; `0` accepts any fee rate. `max_burn_amount` rejects it if it has
+    /// provably unspendable outputs worth more than that, in BTC.
+    fn send_raw_transaction(
+        &self,
+        hex: &str,
+        max_fee_rate: Option<f64>,
+        max_burn_amount: Option<f64>,
+    ) -> Result<String> {
+        self.call(
+            "sendrawtransaction",
+            positional(vec![
+                json!(hex),
+                json!(max_fee_rate),
+                json!(max_burn_amount),
+            ]),
+        )
+    }
+
+    /// Creates an unsigned transaction spending `inputs` and creating
+    /// `outputs`, and returns it hex-encoded.
+    ///
+    /// The transaction is neither signed, nor stored in a wallet, nor
+    /// transmitted to the network. `replaceable` marks it BIP 125-replaceable
+    /// and defaults to `true` on the node; `version` defaults to
+    /// `CTransaction::CURRENT_VERSION` and must be within the standard range
+    /// the node accepts.
+    fn create_raw_transaction(
+        &self,
+        inputs: &[CreateRawTransactionInput],
+        outputs: &[CreateRawTransactionOutput],
+        locktime: Option<u32>,
+        replaceable: Option<bool>,
+        version: Option<u32>,
+    ) -> Result<String> {
+        self.call(
+            "createrawtransaction",
+            positional(vec![
+                serde_json::to_value(inputs)?,
+                serde_json::to_value(outputs)?,
+                json!(locktime),
+                json!(replaceable),
+                json!(version),
+            ]),
+        )
+    }
+
+    /// Decodes the serialized, hex-encoded transaction `hex`.
+    ///
+    /// `iswitness` says whether `hex` is a witness serialization; omitting it
+    /// lets the node decide heuristically.
+    fn decode_raw_transaction(&self, hex: &str, iswitness: Option<bool>) -> Result<Transaction> {
+        self.call(
+            "decoderawtransaction",
+            positional(vec![json!(hex), json!(iswitness)]),
+        )
+    }
+
+    /// Returns whether each of `raw_txs` would be accepted by the mempool,
+    /// in the order they were given.
+    ///
+    /// More than one transaction is tested as a package, so parents must come
+    /// before children. `max_fee_rate` rejects a transaction whose fee rate is
+    /// higher, in BTC/kvB.
+    fn test_mempool_accept(
+        &self,
+        raw_txs: &[String],
+        max_fee_rate: Option<f64>,
+    ) -> Result<Vec<TestMempoolAcceptResult>> {
+        self.call(
+            "testmempoolaccept",
+            positional(vec![json!(raw_txs), json!(max_fee_rate)]),
+        )
+    }
+}
+
+impl<T: RpcCall + ?Sized> RawTransactionsRpc for T {}

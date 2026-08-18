@@ -3,12 +3,16 @@
 mod common;
 
 use bitcoin_rpc::sync::{
-    BlockchainRpc, ClientBuilder, MempoolRpc, MiningRpc, NetworkRpc, RpcCall, RpcCallExt,
+    BlockchainRpc, ClientBuilder, MempoolRpc, MiningRpc, NetworkRpc, RawTransactionsRpc, RpcCall,
+    RpcCallExt,
 };
-use bitcoin_rpc::types::BlockTemplateRequest;
+use bitcoin_rpc::types::{
+    BlockTemplateRequest, CreateRawTransactionInput, CreateRawTransactionOutput,
+};
 use bitcoin_rpc::{Auth, Error};
 use common::fixtures::{
     BLOCK_TEMPLATE_REPLY, BLOCK_WITH_TXS_REPLY, MEMPOOL_ENTRY_REPLY, PEER_INFO_REPLY,
+    RAW_TRANSACTION_REPLY, TEST_MEMPOOL_ACCEPT_REPLY,
 };
 use serde_json::json;
 
@@ -153,6 +157,9 @@ fn get_block_with_txs_sends_verbosity_2_and_deserializes() {
     assert_eq!(block.coinbase_tx.witness.as_deref(), Some("00"));
     assert_eq!(block.tx.len(), 1);
     assert_eq!(block.tx[0].fee, Some(0.00012345));
+    // Reached through the `serde(flatten)`-ed transaction body.
+    assert_eq!(block.tx[0].tx.vsize, 204);
+    assert_eq!(block.tx[0].tx.vout[0].script_pub_key.script_type, "pubkey");
     assert!(block.previous_block_hash.is_some());
     assert_eq!(block.next_block_hash, None);
 
@@ -377,4 +384,111 @@ fn get_network_hash_ps_sends_both_args() {
     let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
     assert_eq!(sent["method"], "getnetworkhashps");
     assert_eq!(sent["params"], json!([120, -1]));
+}
+
+#[test]
+fn get_raw_transaction_sends_verbosity_1_and_deserializes() {
+    let server = common::MockServer::spawn(vec![(200, RAW_TRANSACTION_REPLY.to_string())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let tx = client
+        .get_raw_transaction(
+            "9e1a2d3f4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6",
+            None,
+        )
+        .unwrap();
+    assert_eq!(tx.vsize, 144);
+    assert_eq!(tx.confirmations, Some(12));
+    assert_eq!(tx.in_active_chain, Some(true));
+    assert_eq!(tx.vin[0].vout, Some(1));
+    assert_eq!(tx.vin[0].script_sig.as_ref().unwrap().hex, "483045022100");
+    assert_eq!(tx.vin[0].tx_in_witness.as_ref().unwrap().len(), 2);
+    assert_eq!(tx.vout[0].value, 0.04998);
+    assert_eq!(tx.vout[0].script_pub_key.script_type, "witness_v0_keyhash");
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "getrawtransaction");
+    // The absent `block_hash` is trimmed, but verbosity is still explicit.
+    assert_eq!(
+        sent["params"],
+        json!([
+            "9e1a2d3f4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6",
+            1
+        ])
+    );
+}
+
+#[test]
+fn create_raw_transaction_sends_both_output_forms() {
+    let reply = r#"{"jsonrpc":"2.0","id":1,"result":"0200000001abcdef"}"#.to_string();
+    let server = common::MockServer::spawn(vec![(200, reply.clone()), (200, reply)]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let inputs = [CreateRawTransactionInput {
+        txid: "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b".to_string(),
+        vout: 1,
+        sequence: None,
+    }];
+    let outputs = [
+        CreateRawTransactionOutput::Address {
+            address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
+            amount: 0.01,
+        },
+        CreateRawTransactionOutput::Data("00010203".to_string()),
+    ];
+    let expected_inputs = json!([{"txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b", "vout": 1}]);
+    let expected_outputs =
+        json!([{"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4": 0.01}, {"data": "00010203"}]);
+
+    // All five arguments supplied.
+    let hex = client
+        .create_raw_transaction(&inputs, &outputs, Some(800000), Some(false), Some(3))
+        .unwrap();
+    assert_eq!(hex, "0200000001abcdef");
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "createrawtransaction");
+    assert_eq!(
+        sent["params"],
+        json!([expected_inputs, expected_outputs, 800000, false, 3])
+    );
+
+    // `version` omitted: trimmed as a trailing null, not sent explicitly.
+    client
+        .create_raw_transaction(&inputs, &outputs, Some(800000), Some(false), None)
+        .unwrap();
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[1].body).unwrap();
+    assert_eq!(
+        sent["params"],
+        json!([expected_inputs, expected_outputs, 800000, false])
+    );
+}
+
+#[test]
+fn test_mempool_accept_deserializes_hyphenated_fee_keys() {
+    let server = common::MockServer::spawn(vec![(200, TEST_MEMPOOL_ACCEPT_REPLY.to_string())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let raw_txs = [
+        "0200000001abcdef".to_string(),
+        "0200000001fedcba".to_string(),
+    ];
+    let results = client.test_mempool_accept(&raw_txs, None).unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].allowed, Some(true));
+    let fees = results[0].fees.as_ref().unwrap();
+    assert_eq!(fees.base, 0.00001234);
+    assert_eq!(fees.effective_feerate, 0.00008567);
+    assert_eq!(fees.effective_includes.len(), 1);
+    // Validation left unfinished by the first transaction: no `allowed` key.
+    assert_eq!(results[1].allowed, None);
+    assert_eq!(results[1].fees, None);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "testmempoolaccept");
+    assert_eq!(
+        sent["params"],
+        json!([["0200000001abcdef", "0200000001fedcba"]])
+    );
 }
