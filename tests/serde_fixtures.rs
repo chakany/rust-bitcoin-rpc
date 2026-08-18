@@ -1282,3 +1282,141 @@ fn create_raw_transaction_output_serializes_the_address_as_the_key() {
         json!({ "data": "00010203" })
     );
 }
+
+#[test]
+fn estimate_smart_fee_full() {
+    let v = json!({
+        "feerate": 0.00001200,
+        "errors": ["some warning"],
+        "blocks": 6
+    });
+    let est: EstimateSmartFee = serde_json::from_value(v).unwrap();
+    assert_eq!(est.feerate, Some(0.00001200));
+    assert_eq!(est.errors, Some(vec!["some warning".to_string()]));
+    assert_eq!(est.blocks, 6);
+}
+
+#[test]
+fn estimate_smart_fee_errors_only() {
+    // When the node cannot produce an estimate it omits `feerate` entirely
+    // and returns only `errors` and `blocks`.
+    let v = json!({
+        "errors": ["Insufficient data or no feerate found"],
+        "blocks": 1008,
+        "some_field_from_a_future_release": 1
+    });
+    let est: EstimateSmartFee = serde_json::from_value(v).unwrap();
+    assert_eq!(est.feerate, None);
+    assert_eq!(
+        est.errors,
+        Some(vec!["Insufficient data or no feerate found".to_string()])
+    );
+    assert_eq!(est.blocks, 1008);
+}
+
+#[test]
+fn get_rpc_info_full() {
+    let v = json!({
+        "active_commands": [
+            {
+                "method": "getblockchaininfo",
+                "duration": 1234,
+                "some_nested_field_from_a_future_release": 1
+            }
+        ],
+        "logpath": "/home/user/.bitcoin/debug.log"
+    });
+    let info: GetRpcInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.active_commands.len(), 1);
+    assert_eq!(info.active_commands[0].method, "getblockchaininfo");
+    assert_eq!(info.active_commands[0].duration, 1234);
+    assert_eq!(info.logpath, "/home/user/.bitcoin/debug.log");
+}
+
+#[test]
+fn get_rpc_info_minimal_and_forward_compatible() {
+    let v = json!({
+        "active_commands": [],
+        "logpath": "/home/user/.bitcoin/debug.log",
+        "some_field_from_a_future_release": 1
+    });
+    let info: GetRpcInfo = serde_json::from_value(v).unwrap();
+    assert!(info.active_commands.is_empty());
+    assert_eq!(info.logpath, "/home/user/.bitcoin/debug.log");
+}
+
+#[test]
+fn validate_address_full() {
+    // The node never sets every field simultaneously (the success and error
+    // paths are mutually exclusive in `output_script.cpp`), but the fixture
+    // sets all eight optionals at once purely to exercise every field's
+    // deserialization.
+    let v = json!({
+        "isvalid": true,
+        "address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+        "scriptPubKey": "0014abcdef01",
+        "isscript": false,
+        "iswitness": true,
+        "witness_version": 0,
+        "witness_program": "abcdef01",
+        "error": "Invalid Bech32 checksum",
+        "error_locations": [9, 10]
+    });
+    let addr: ValidateAddress = serde_json::from_value(v).unwrap();
+    assert!(addr.isvalid);
+    assert_eq!(
+        addr.address.as_deref(),
+        Some("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+    );
+    assert_eq!(addr.script_pub_key.as_deref(), Some("0014abcdef01"));
+    assert_eq!(addr.isscript, Some(false));
+    assert_eq!(addr.iswitness, Some(true));
+    assert_eq!(addr.witness_version, Some(0));
+    assert_eq!(addr.witness_program.as_deref(), Some("abcdef01"));
+    assert_eq!(addr.error.as_deref(), Some("Invalid Bech32 checksum"));
+    assert_eq!(addr.error_locations, Some(vec![9, 10]));
+}
+
+#[test]
+fn validate_address_invalid_returns_only_isvalid_and_error_fields() {
+    // An invalid address returns little more than `isvalid: false`, plus the
+    // error fields; none of the success-path optionals are present.
+    let v = json!({
+        "isvalid": false,
+        "error": "Invalid Bech32 checksum",
+        "error_locations": [9, 10],
+        "some_field_from_a_future_release": 1
+    });
+    let addr: ValidateAddress = serde_json::from_value(v).unwrap();
+    assert!(!addr.isvalid);
+    assert_eq!(addr.address, None);
+    assert_eq!(addr.script_pub_key, None);
+    assert_eq!(addr.isscript, None);
+    assert_eq!(addr.iswitness, None);
+    assert_eq!(addr.witness_version, None);
+    assert_eq!(addr.witness_program, None);
+    assert_eq!(addr.error.as_deref(), Some("Invalid Bech32 checksum"));
+    assert_eq!(addr.error_locations, Some(vec![9, 10]));
+}
+
+#[test]
+fn index_info_map_full() {
+    let v = json!({
+        "txindex": {
+            "synced": true,
+            "best_block_height": 800000,
+            "some_nested_field_from_a_future_release": 1
+        }
+    });
+    let map: std::collections::BTreeMap<String, IndexInfo> = serde_json::from_value(v).unwrap();
+    let txindex = map.get("txindex").unwrap();
+    assert!(txindex.synced);
+    assert_eq!(txindex.best_block_height, 800000);
+}
+
+#[test]
+fn index_info_map_minimal_and_forward_compatible() {
+    let v = json!({});
+    let map: std::collections::BTreeMap<String, IndexInfo> = serde_json::from_value(v).unwrap();
+    assert!(map.is_empty());
+}

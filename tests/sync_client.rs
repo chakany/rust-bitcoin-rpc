@@ -3,8 +3,8 @@
 mod common;
 
 use bitcoin_rpc::sync::{
-    BlockchainRpc, ClientBuilder, MempoolRpc, MiningRpc, NetworkRpc, RawTransactionsRpc, RpcCall,
-    RpcCallExt,
+    BlockchainRpc, ClientBuilder, ControlRpc, FeeRpc, MempoolRpc, MiningRpc, NetworkRpc,
+    RawTransactionsRpc, RpcCall, RpcCallExt, UtilRpc,
 };
 use bitcoin_rpc::types::{
     BlockTemplateRequest, CreateRawTransactionInput, CreateRawTransactionOutput,
@@ -491,4 +491,92 @@ fn test_mempool_accept_deserializes_hyphenated_fee_keys() {
         sent["params"],
         json!([["0200000001abcdef", "0200000001fedcba"]])
     );
+}
+
+#[test]
+fn validate_address_sends_positional_address_and_deserializes_the_invalid_shape() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":{"isvalid":false,"error":"Invalid Bech32 checksum","error_locations":[9,10]}}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let addr = client
+        .validate_address("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5")
+        .unwrap();
+    assert!(!addr.isvalid);
+    assert_eq!(addr.address, None);
+    assert_eq!(addr.error.as_deref(), Some("Invalid Bech32 checksum"));
+    assert_eq!(addr.error_locations, Some(vec![9, 10]));
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "validateaddress");
+    assert_eq!(
+        sent["params"],
+        json!(["bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5"])
+    );
+}
+
+#[test]
+fn estimate_smart_fee_sends_both_params_and_deserializes_the_errors_only_shape() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":{"errors":["Insufficient data or no feerate found"],"blocks":1008}}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let est = client.estimate_smart_fee(6, Some("conservative")).unwrap();
+    assert_eq!(est.feerate, None);
+    assert_eq!(
+        est.errors,
+        Some(vec!["Insufficient data or no feerate found".to_string()])
+    );
+    assert_eq!(est.blocks, 1008);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "estimatesmartfee");
+    assert_eq!(sent["params"], json!([6, "conservative"]));
+}
+
+#[test]
+fn get_index_info_deserializes_the_dynamic_map() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":{"txindex":{"synced":true,"best_block_height":800000}}}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let map = client.get_index_info(None).unwrap();
+    let txindex = map.get("txindex").unwrap();
+    assert!(txindex.synced);
+    assert_eq!(txindex.best_block_height, 800000);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "getindexinfo");
+    assert_eq!(sent["params"], json!([]));
+}
+
+#[test]
+fn control_rpcs_send_expected_params_and_deserialize_string_results() {
+    let server = common::MockServer::spawn(vec![
+        (200, r#"{"jsonrpc":"2.0","id":1,"result":3600}"#.to_string()),
+        (
+            200,
+            r#"{"jsonrpc":"2.0","id":1,"result":"Bitcoin Core stopping"}"#.to_string(),
+        ),
+        (
+            200,
+            r#"{"jsonrpc":"2.0","id":1,"result":"== Blockchain ==\ngetblockcount\n"}"#.to_string(),
+        ),
+    ]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    assert_eq!(client.uptime().unwrap(), 3600);
+    assert_eq!(client.stop().unwrap(), "Bitcoin Core stopping");
+    let help_text = client.help(Some("getblockcount")).unwrap();
+    assert!(help_text.contains("getblockcount"));
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[2].body).unwrap();
+    assert_eq!(sent["method"], "help");
+    assert_eq!(sent["params"], json!(["getblockcount"]));
 }

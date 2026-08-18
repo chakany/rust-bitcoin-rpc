@@ -17,8 +17,9 @@ use crate::params::positional;
 use crate::types::{
     Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest, BlockWithTxs,
     ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput, DeploymentInfo,
-    GetBlockchainInfo, GetMempoolInfo, GetMiningInfo, GetNetTotals, GetNetworkInfo,
-    GetRawMempoolSequence, MempoolEntry, PeerInfo, TestMempoolAcceptResult, Transaction, TxOut,
+    EstimateSmartFee, GetBlockchainInfo, GetMempoolInfo, GetMiningInfo, GetNetTotals,
+    GetNetworkInfo, GetRawMempoolSequence, GetRpcInfo, IndexInfo, MempoolEntry, PeerInfo,
+    TestMempoolAcceptResult, Transaction, TxOut, ValidateAddress,
 };
 
 /// Blockchain RPCs.
@@ -430,3 +431,77 @@ pub trait RawTransactionsRpc: RpcCallAsync {
 }
 
 impl<T: RpcCallAsync + ?Sized> RawTransactionsRpc for T {}
+
+/// Fee estimation RPCs.
+pub trait FeeRpc: RpcCallAsync {
+    /// Estimates the approximate fee per kilobyte needed for a transaction to
+    /// begin confirmation within `conf_target` blocks if possible, and
+    /// returns the number of blocks for which the estimate is valid.
+    ///
+    /// Uses virtual transaction size as defined in BIP 141 (witness data is
+    /// discounted). `estimate_mode` defaults to `"economical"` on the node.
+    fn estimate_smart_fee(
+        &self,
+        conf_target: u32,
+        estimate_mode: Option<&str>,
+    ) -> impl Future<Output = Result<EstimateSmartFee>> + Send + '_ {
+        self.call(
+            "estimatesmartfee",
+            positional(vec![json!(conf_target), json!(estimate_mode)]),
+        )
+    }
+}
+
+impl<T: RpcCallAsync + ?Sized> FeeRpc for T {}
+
+/// Control RPCs.
+pub trait ControlRpc: RpcCallAsync {
+    /// Returns the total uptime of the server, in seconds.
+    fn uptime(&self) -> impl Future<Output = Result<u64>> + Send + '_ {
+        self.call("uptime", positional(vec![]))
+    }
+
+    /// Requests a graceful shutdown of the node.
+    fn stop(&self) -> impl Future<Output = Result<String>> + Send + '_ {
+        self.call("stop", positional(vec![]))
+    }
+
+    /// Lists all commands, or gets help for `command` if given.
+    ///
+    /// The node also documents a `Type::ANY` result branch for internal,
+    /// undocumented sub-commands (e.g. `dump_all_command_conversions`); the
+    /// plain-string branch modelled here is what every public command
+    /// returns.
+    fn help(&self, command: Option<&str>) -> impl Future<Output = Result<String>> + Send + '_ {
+        self.call("help", positional(vec![json!(command)]))
+    }
+
+    /// Returns details of the RPC server.
+    fn get_rpc_info(&self) -> impl Future<Output = Result<GetRpcInfo>> + Send + '_ {
+        self.call("getrpcinfo", positional(vec![]))
+    }
+}
+
+impl<T: RpcCallAsync + ?Sized> ControlRpc for T {}
+
+/// Utility RPCs.
+pub trait UtilRpc: RpcCallAsync {
+    /// Returns information about the given bitcoin `address`.
+    fn validate_address(
+        &self,
+        address: &str,
+    ) -> impl Future<Output = Result<ValidateAddress>> + Send + '_ {
+        self.call("validateaddress", positional(vec![json!(address)]))
+    }
+
+    /// Returns the status of one or all available indices currently running
+    /// in the node, keyed by index name.
+    fn get_index_info(
+        &self,
+        index_name: Option<&str>,
+    ) -> impl Future<Output = Result<BTreeMap<String, IndexInfo>>> + Send + '_ {
+        self.call("getindexinfo", positional(vec![json!(index_name)]))
+    }
+}
+
+impl<T: RpcCallAsync + ?Sized> UtilRpc for T {}
