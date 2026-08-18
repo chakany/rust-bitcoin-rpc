@@ -7,6 +7,13 @@
 mod error;
 mod auth;
 
+#[cfg(any(feature = "sync", feature = "aio"))]
+mod config;
+#[cfg(any(feature = "sync", feature = "aio"))]
+mod jsonrpc;
+#[cfg(any(feature = "sync", feature = "aio"))]
+mod params;
+
 pub mod types;
 
 pub use error::{Error, RpcError, Result};
