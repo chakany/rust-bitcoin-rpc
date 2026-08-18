@@ -1,2 +1,156 @@
-# rust-bitcoin-rpc
-Async rust client for bitcoin rpc
+# bitcoin-rpc
+
+A JSON-RPC client for Bitcoin Core v31.1, with blocking and async
+implementations that share one typed method set.
+
+## Features
+
+Nothing is enabled by default; pick the client(s) you need.
+
+| Feature | What it does |
+| --- | --- |
+| `serde` | `Serialize`/`Deserialize` on the crate's types. Pulled in automatically by `sync` and `aio`; on its own it adds no client. |
+| `sync` | A blocking client built on [`ureq`]. Links no async runtime. |
+| `aio` | An async client built on [`reqwest`]. The runtime is entirely the caller's choice; this crate itself does not depend on `tokio`. |
+| `tls` | TLS support for whichever client(s) are enabled. Rustls only — `native-tls`/OpenSSL is never enabled under any feature combination. `aio` + `tls` needs `cmake` and a C compiler available at build time, to build `aws-lc-sys`. |
+
+[`ureq`]: https://crates.io/crates/ureq
+[`reqwest`]: https://crates.io/crates/reqwest
+
+## Quickstart: sync
+
+```rust,no_run
+use bitcoin_rpc::sync::{BlockchainRpc, ClientBuilder};
+use bitcoin_rpc::Auth;
+
+let client = ClientBuilder::new("http://127.0.0.1:8332")
+    .auth(Auth::cookie_file("/home/user/.bitcoin/.cookie"))
+    .build()?;
+
+let info = client.get_blockchain_info()?;
+println!("{} blocks on {}", info.blocks, info.chain);
+```
+
+## Quickstart: async
+
+```rust,no_run
+use bitcoin_rpc::aio::{BlockchainRpc, ClientBuilder};
+use bitcoin_rpc::Auth;
+
+let client = ClientBuilder::new("http://127.0.0.1:8332")
+    .auth(Auth::cookie_file("/home/user/.bitcoin/.cookie"))
+    .build()?;
+
+let info = client.get_blockchain_info().await?;
+println!("{} blocks on {}", info.blocks, info.chain);
+```
+
+Every piece of these two snippets is real and compiles: the
+builder-and-`auth`-and-`build` pattern is exactly what `tests/sync_client.rs`
+and `tests/aio_client.rs` use throughout, `Auth::cookie_file` is unit-tested in
+`src/auth.rs` and used live in `examples/btc-cli.rs`, and the `blocks`/`chain`
+fields on the `get_blockchain_info` result are pinned by the
+`get_blockchain_info_full` fixture test in `tests/serde_fixtures.rs`. Only the
+network round-trip to a real node is untested — see [Scope](#scope).
+
+## Adding your own RPC
+
+This crate ships 44 typed methods (see [Scope](#scope) below) but not every
+RPC Bitcoin Core exposes. Reaching anything else — the wallet RPCs, the
+hidden/regtest-only RPCs, or a method a future Core release adds — means
+writing your own extension trait over `RpcCall` (sync) or `RpcCallAsync`
+(async). This is exactly the mechanism the crate's own typed methods are
+built on, and it is exercised end-to-end in `tests/extension_trait.rs`:
+
+```rust
+use bitcoin_rpc::Result;
+use bitcoin_rpc::sync::{RpcCall, RpcCallExt};
+use serde_json::json;
+
+/// A response type a user of this crate would define themselves.
+#[derive(Debug, serde::Deserialize)]
+pub struct OrphanTx {
+    txid: String,
+}
+
+/// Written exactly as a downstream crate would, for an RPC we do not ship.
+pub trait OrphanRpc: RpcCall {
+    fn get_orphan_txs(&self) -> Result<Vec<OrphanTx>> {
+        self.call("getorphantxs", json!([2]))
+    }
+}
+impl<T: RpcCall + ?Sized> OrphanRpc for T {}
+```
+
+The async version is the same shape, using `RpcCallAsync`/`RpcCallAsyncExt`
+and returning `impl Future` instead of a plain `Result`:
+
+```rust
+use bitcoin_rpc::Result;
+use bitcoin_rpc::aio::{RpcCallAsync, RpcCallAsyncExt};
+use serde_json::json;
+use std::future::Future;
+
+/// Written exactly as a downstream crate would, for an RPC we do not ship.
+pub trait OrphanRpc: RpcCallAsync {
+    fn get_orphan_txs(&self) -> impl Future<Output = Result<Vec<OrphanTx>>> + Send + '_ {
+        self.call("getorphantxs", json!([2]))
+    }
+}
+impl<T: RpcCallAsync + ?Sized> OrphanRpc for T {}
+```
+
+Both forms use the same blanket-`impl`-over-`RpcCall`/`RpcCallAsync`
+mechanism the crate's own shipped traits use, so they compose with those
+traits on the same client value rather than conflicting with them — proven
+for the sync side by
+`user_extension_composes_with_a_shipped_trait_on_the_same_client` in
+`tests/extension_trait.rs`.
+
+## Scope
+
+44 typed methods across eight traits: `BlockchainRpc` (15), `NetworkRpc` (6),
+`RawTransactionsRpc` (6), `MempoolRpc` (5), `MiningRpc` (5), `ControlRpc` (4),
+`UtilRpc` (2), `FeeRpc` (1) — over 38 distinct RPC commands. The surplus of 6
+comes from four commands whose result shape depends on a verbosity or mode
+argument, so each is split into a separate typed method: `getblock` (x3:
+`get_block_hex`, `get_block`, `get_block_with_txs`), `getrawmempool` (x3:
+`get_raw_mempool`, `get_raw_mempool_verbose`, `get_raw_mempool_with_sequence`),
+`getblockheader` (x2: `get_block_header`, `get_block_header_hex`), and
+`getrawtransaction` (x2: `get_raw_transaction`, `get_raw_transaction_hex`).
+
+Not covered, deliberately:
+
+- No wallet RPCs (everything under Bitcoin Core's `wallet` category).
+- No hidden or regtest-only RPCs (e.g. `generatetoaddress`, `invalidateblock`).
+- No request batching — one JSON-RPC request per call.
+- Deprecated arguments are omitted from method signatures, with one
+  exception: `warnings` accepts both Core's modern array form and its legacy
+  bare-string form (emitted by a node run with `-deprecatedrpc=warnings`),
+  because rejecting the legacy form would otherwise break
+  `getblockchaininfo` outright against such a node.
+
+Use the extension-trait pattern above for anything on the "not covered" list.
+
+This crate has been verified against the Bitcoin Core v31.1 source and
+against a mock HTTP server (see `tests/`), but has not yet been exercised
+against a live node's happy path.
+
+## Errors
+
+Every fallible call returns `bitcoin_rpc::Result<T>`, an alias for
+`Result<T, Error>`. `Error` has four variants:
+
+- `Config` — the client was misconfigured: a bad URL, or an unreadable or
+  malformed cookie file.
+- `Transport` — the HTTP request failed, or the node's HTTP-level response
+  could not be turned into a JSON-RPC reply (for example, a `401` from a
+  node that rejected the supplied credentials arrives this way, naming the
+  status in the message).
+- `Json` — the reply body was not the JSON expected at the JSON-RPC layer.
+- `Rpc` — the node executed the request and returned a JSON-RPC error. Its
+  `code` is Core's raw `RPC_*` constant from `src/rpc/protocol.h`.
+
+## License
+
+MIT, Copyright (c) 2026 Jakub Trnka. See [`LICENSE`](./LICENSE).
