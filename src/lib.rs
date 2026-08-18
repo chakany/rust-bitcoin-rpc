@@ -5,7 +5,9 @@
 #![warn(missing_docs)]
 
 mod error;
+mod auth;
 
 pub mod types;
 
 pub use error::{Error, RpcError, Result};
+pub use auth::Auth;
