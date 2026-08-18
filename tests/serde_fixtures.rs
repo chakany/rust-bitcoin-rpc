@@ -404,3 +404,154 @@ fn block_hash_and_height_forward_compatible() {
     let tip: BlockHashAndHeight = serde_json::from_value(v).unwrap();
     assert_eq!(tip.height, 0);
 }
+
+#[test]
+fn get_mempool_info_full() {
+    let v = json!({
+        "loaded": true, "size": 120, "bytes": 45000, "usage": 987654,
+        "total_fee": 0.01234567, "maxmempool": 300000000_u64,
+        "mempoolminfee": 0.00001000, "minrelaytxfee": 0.00001000,
+        "incrementalrelayfee": 0.00001000, "unbroadcastcount": 3,
+        "permitbaremultisig": true, "maxdatacarriersize": 83,
+        "limitclustercount": 500, "limitclustersize": 101000,
+        "optimal": true
+    });
+    let info: GetMempoolInfo = serde_json::from_value(v).unwrap();
+    assert!(info.loaded);
+    assert_eq!(info.size, 120);
+    assert_eq!(info.bytes, 45000);
+    assert_eq!(info.usage, 987654);
+    // STR_AMOUNT is an unquoted JSON number, hence f64.
+    assert_eq!(info.total_fee, 0.01234567);
+    assert_eq!(info.max_mempool, 300000000);
+    assert_eq!(info.mempool_min_fee, 0.00001000);
+    assert_eq!(info.min_relay_tx_fee, 0.00001000);
+    assert_eq!(info.incremental_relay_fee, 0.00001000);
+    assert_eq!(info.unbroadcast_count, 3);
+    assert!(info.permit_bare_multisig);
+    assert_eq!(info.max_datacarrier_size, 83);
+    assert_eq!(info.limit_cluster_count, 500);
+    assert_eq!(info.limit_cluster_size, 101000);
+    assert!(info.optimal);
+}
+
+#[test]
+fn get_mempool_info_forward_compatible() {
+    // Every field is required in `getmempoolinfo`'s RPCResult, so this test's
+    // forward-compatibility burden falls entirely on the unknown field, plus
+    // proving the deprecated `fullrbf` field (present on a real node) is
+    // tolerated even though `GetMempoolInfo` has no field for it.
+    let v = json!({
+        "loaded": false, "size": 0, "bytes": 0, "usage": 0,
+        "total_fee": 0.0, "maxmempool": 300000000_u64,
+        "mempoolminfee": 0.00001000, "minrelaytxfee": 0.00001000,
+        "incrementalrelayfee": 0.00001000, "unbroadcastcount": 0,
+        "permitbaremultisig": false, "maxdatacarriersize": 0,
+        "limitclustercount": 0, "limitclustersize": 0,
+        "optimal": false,
+        "fullrbf": true,
+        "some_field_from_a_future_release": 1
+    });
+    let info: GetMempoolInfo = serde_json::from_value(v).unwrap();
+    assert!(!info.loaded);
+    assert_eq!(info.size, 0);
+    assert!(!info.optimal);
+}
+
+#[test]
+fn mempool_entry_full() {
+    let v = json!({
+        "vsize": 204, "weight": 816, "time": 1690000000, "height": 800000,
+        "descendantcount": 2, "descendantsize": 408,
+        "ancestorcount": 1, "ancestorsize": 204,
+        "chunkweight": 816,
+        "wtxid": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
+        "fees": {
+            "base": 0.00012345, "modified": 0.00012400,
+            "ancestor": 0.00012345, "descendant": 0.00024690,
+            "chunk": 0.00012345
+        },
+        "depends": ["4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"],
+        "spentby": ["9b1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b1"],
+        "bip125-replaceable": true,
+        "unbroadcast": false
+    });
+    let entry: MempoolEntry = serde_json::from_value(v).unwrap();
+    assert_eq!(entry.vsize, 204);
+    assert_eq!(entry.weight, 816);
+    assert_eq!(entry.time, 1690000000);
+    assert_eq!(entry.height, 800000);
+    assert_eq!(entry.descendant_count, 2);
+    assert_eq!(entry.descendant_size, 408);
+    assert_eq!(entry.ancestor_count, 1);
+    assert_eq!(entry.ancestor_size, 204);
+    assert_eq!(entry.chunk_weight, 816);
+    assert_eq!(
+        entry.wtxid,
+        "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"
+    );
+    // STR_AMOUNT fields are unquoted JSON numbers, hence f64.
+    assert_eq!(entry.fees.base, 0.00012345);
+    assert_eq!(entry.fees.modified, 0.00012400);
+    assert_eq!(entry.fees.ancestor, 0.00012345);
+    assert_eq!(entry.fees.descendant, 0.00024690);
+    assert_eq!(entry.fees.chunk, 0.00012345);
+    assert_eq!(entry.depends.len(), 1);
+    assert_eq!(entry.spent_by.len(), 1);
+    assert!(!entry.unbroadcast);
+}
+
+#[test]
+fn mempool_entry_minimal_and_forward_compatible() {
+    // Every field is required in `MempoolEntryDescription`, so this test's
+    // forward-compatibility burden falls on the unknown field, plus proving
+    // the deprecated `bip125-replaceable` field is simply absent here and
+    // that omitting it from `MempoolEntry` does not break deserialization.
+    let v = json!({
+        "vsize": 110, "weight": 440, "time": 1600000000, "height": 700000,
+        "descendantcount": 1, "descendantsize": 110,
+        "ancestorcount": 1, "ancestorsize": 110,
+        "chunkweight": 440,
+        "wtxid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+        "fees": {
+            "base": 0.0, "modified": 0.0, "ancestor": 0.0,
+            "descendant": 0.0, "chunk": 0.0
+        },
+        "depends": [], "spentby": [],
+        "unbroadcast": true,
+        "some_field_from_a_future_release": "x"
+    });
+    let entry: MempoolEntry = serde_json::from_value(v).unwrap();
+    assert_eq!(entry.vsize, 110);
+    assert!(entry.depends.is_empty());
+    assert!(entry.spent_by.is_empty());
+    assert!(entry.unbroadcast);
+    assert_eq!(entry.fees.base, 0.0);
+}
+
+#[test]
+fn get_raw_mempool_sequence_full() {
+    let v = json!({
+        "txids": ["2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"],
+        "mempool_sequence": 12345_u64
+    });
+    let seq: GetRawMempoolSequence = serde_json::from_value(v).unwrap();
+    assert_eq!(seq.txids.len(), 1);
+    assert_eq!(
+        seq.txids[0],
+        "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"
+    );
+    assert_eq!(seq.mempool_sequence, 12345);
+}
+
+#[test]
+fn get_raw_mempool_sequence_forward_compatible() {
+    let v = json!({
+        "txids": [],
+        "mempool_sequence": 0,
+        "some_field_from_a_future_release": 1
+    });
+    let seq: GetRawMempoolSequence = serde_json::from_value(v).unwrap();
+    assert!(seq.txids.is_empty());
+    assert_eq!(seq.mempool_sequence, 0);
+}

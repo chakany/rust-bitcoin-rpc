@@ -2,9 +2,9 @@
 
 mod common;
 
-use bitcoin_rpc::aio::{BlockchainRpc, ClientBuilder, RpcCallAsync, RpcCallAsyncExt};
+use bitcoin_rpc::aio::{BlockchainRpc, ClientBuilder, MempoolRpc, RpcCallAsync, RpcCallAsyncExt};
 use bitcoin_rpc::{Auth, Error};
-use common::fixtures::BLOCK_WITH_TXS_REPLY;
+use common::fixtures::{BLOCK_WITH_TXS_REPLY, MEMPOOL_ENTRY_REPLY};
 use serde_json::json;
 
 #[tokio::test]
@@ -181,4 +181,46 @@ async fn wait_for_new_block_keeps_interior_null_timeout() {
     let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
     assert_eq!(sent["method"], "waitfornewblock");
     assert_eq!(sent["params"], json!([null, "dead"]));
+}
+
+#[tokio::test]
+async fn get_mempool_entry_sends_txid_and_deserializes() {
+    let server = common::MockServer::spawn(vec![(200, MEMPOOL_ENTRY_REPLY.to_string())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let entry = client
+        .get_mempool_entry("2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866")
+        .await
+        .unwrap();
+    assert_eq!(entry.vsize, 204);
+    assert_eq!(entry.height, 800000);
+    assert_eq!(entry.fees.base, 0.00012345);
+    assert_eq!(entry.depends.len(), 1);
+    assert!(entry.spent_by.is_empty());
+    assert!(!entry.unbroadcast);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "getmempoolentry");
+    assert_eq!(
+        sent["params"],
+        json!(["2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"])
+    );
+}
+
+#[tokio::test]
+async fn get_raw_mempool_with_sequence_sends_verbose_false_and_sequence_true() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":{"txids":["abc123"],"mempool_sequence":42}}"#
+            .to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let seq = client.get_raw_mempool_with_sequence().await.unwrap();
+    assert_eq!(seq.txids, vec!["abc123"]);
+    assert_eq!(seq.mempool_sequence, 42);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "getrawmempool");
+    assert_eq!(sent["params"], json!([false, true]));
 }

@@ -6,6 +6,7 @@
 //! Method names, parameters and result types mirror [`crate::sync`] exactly;
 //! only the return-type wrapper differs.
 
+use std::collections::BTreeMap;
 use std::future::Future;
 
 use serde_json::json;
@@ -15,7 +16,7 @@ use crate::Result;
 use crate::params::positional;
 use crate::types::{
     Block, BlockHashAndHeight, BlockHeader, BlockWithTxs, ChainTip, DeploymentInfo,
-    GetBlockchainInfo, TxOut,
+    GetBlockchainInfo, GetMempoolInfo, GetRawMempoolSequence, MempoolEntry, TxOut,
 };
 
 /// Blockchain RPCs.
@@ -150,3 +151,43 @@ pub trait BlockchainRpc: RpcCallAsync {
 }
 
 impl<T: RpcCallAsync + ?Sized> BlockchainRpc for T {}
+
+/// Mempool RPCs.
+pub trait MempoolRpc: RpcCallAsync {
+    /// Returns details on the active state of the TX memory pool.
+    fn get_mempool_info(&self) -> impl Future<Output = Result<GetMempoolInfo>> + Send + '_ {
+        self.call("getmempoolinfo", positional(vec![]))
+    }
+
+    /// Returns all transaction ids in the mempool as a list of transaction
+    /// ids.
+    fn get_raw_mempool(&self) -> impl Future<Output = Result<Vec<String>>> + Send + '_ {
+        self.call("getrawmempool", positional(vec![json!(false)]))
+    }
+
+    /// Returns all transactions in the mempool, keyed by transaction id, with
+    /// their full mempool entry data.
+    fn get_raw_mempool_verbose(
+        &self,
+    ) -> impl Future<Output = Result<BTreeMap<String, MempoolEntry>>> + Send + '_ {
+        self.call("getrawmempool", positional(vec![json!(true)]))
+    }
+
+    /// Returns the transaction ids in the mempool together with the mempool
+    /// sequence number, as of the moment the list was generated.
+    fn get_raw_mempool_with_sequence(
+        &self,
+    ) -> impl Future<Output = Result<GetRawMempoolSequence>> + Send + '_ {
+        self.call("getrawmempool", positional(vec![json!(false), json!(true)]))
+    }
+
+    /// Returns mempool data for the given transaction `txid`.
+    fn get_mempool_entry(
+        &self,
+        txid: &str,
+    ) -> impl Future<Output = Result<MempoolEntry>> + Send + '_ {
+        self.call("getmempoolentry", positional(vec![json!(txid)]))
+    }
+}
+
+impl<T: RpcCallAsync + ?Sized> MempoolRpc for T {}
