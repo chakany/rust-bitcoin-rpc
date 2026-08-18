@@ -4,8 +4,10 @@
 //! dependency graph.
 
 mod call;
+mod methods;
 
 pub use call::{RpcCall, RpcCallExt};
+pub use methods::*;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;

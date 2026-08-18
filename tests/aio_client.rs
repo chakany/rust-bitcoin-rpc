@@ -2,7 +2,7 @@
 
 mod common;
 
-use bitcoin_rpc::aio::{ClientBuilder, RpcCallAsync, RpcCallAsyncExt};
+use bitcoin_rpc::aio::{BlockchainRpc, ClientBuilder, RpcCallAsync, RpcCallAsyncExt};
 use bitcoin_rpc::{Auth, Error};
 use serde_json::json;
 
@@ -91,4 +91,94 @@ async fn client_is_shareable_and_futures_are_spawnable() {
     // The `Sync` supertrait exists so this future is Send.
     let handle = tokio::spawn(async move { client.call_raw("uptime", json!([])).await });
     assert_eq!(handle.await.unwrap().unwrap(), json!(123));
+}
+
+// A getblock verbosity-2 reply: the most complex blockchain result, exercising a
+// nested object, an array of objects and an absent optional field.
+const BLOCK_WITH_TXS_REPLY: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"hash":"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09","confirmations":799901,"size":285,"strippedsize":285,"weight":1140,"coinbase_tx":{"version":1,"locktime":0,"sequence":4294967295,"coinbase":"04ffff001d0102","witness":"00"},"height":100,"version":1,"versionHex":"00000001","merkleroot":"2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866","tx":[{"txid":"2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866","vin":[],"vout":[],"fee":0.00012345}],"time":1231660825,"mediantime":1231658656,"nonce":2573394689,"bits":"1d00ffff","target":"00000000ffff0000000000000000000000000000000000000000000000000000","difficulty":1.0,"chainwork":"6500650065","nTx":1,"previousblockhash":"000000007bc154e0fa7ea32218a72fe2c1bb9f86cf8c9ebf9a715ed27fdb229a"}}"#;
+
+#[tokio::test]
+async fn get_block_with_txs_sends_verbosity_2_and_deserializes() {
+    let server = common::MockServer::spawn(vec![(200, BLOCK_WITH_TXS_REPLY.to_string())]);
+    let client = std::sync::Arc::new(ClientBuilder::new(server.url()).build().unwrap());
+
+    // Spawning also proves the typed method's future is Send.
+    let spawned = std::sync::Arc::clone(&client);
+    let block = tokio::spawn(async move {
+        spawned
+            .get_block_with_txs("00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09")
+            .await
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(block.height, 100);
+    assert_eq!(block.stripped_size, 285);
+    assert_eq!(block.coinbase_tx.sequence, 4294967295);
+    assert_eq!(block.coinbase_tx.witness.as_deref(), Some("00"));
+    assert_eq!(block.tx.len(), 1);
+    assert_eq!(block.tx[0].fee, Some(0.00012345));
+    assert!(block.previous_block_hash.is_some());
+    assert_eq!(block.next_block_hash, None);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "getblock");
+    assert_eq!(
+        sent["params"],
+        json!([
+            "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09",
+            2
+        ])
+    );
+}
+
+#[tokio::test]
+async fn get_tx_out_miss_returns_none_and_omits_default_include_mempool() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":null}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    assert_eq!(client.get_tx_out("abc123", 0, None).await.unwrap(), None);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "gettxout");
+    assert_eq!(sent["params"], json!(["abc123", 0]));
+}
+
+#[tokio::test]
+async fn get_deployment_info_omits_absent_block_hash() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":{"hash":"0f91","height":0,"script_flags":["P2SH"],"deployments":{"segwit":{"type":"buried","height":0,"active":true}}}}"#
+            .to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let info = client.get_deployment_info(None).await.unwrap();
+    assert_eq!(info.script_flags, vec!["P2SH"]);
+    assert_eq!(info.deployments["segwit"].deployment_type, "buried");
+    assert_eq!(info.deployments["segwit"].bip9, None);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["params"], json!([]));
+}
+
+#[tokio::test]
+async fn wait_for_new_block_keeps_interior_null_timeout() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":{"hash":"0f91","height":7}}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let tip = client.wait_for_new_block(None, Some("dead")).await.unwrap();
+    assert_eq!(tip.height, 7);
+
+    // An omitted `timeout` before a present `current_tip` must stay an explicit
+    // null so the node still sees `current_tip` in position 1.
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "waitfornewblock");
+    assert_eq!(sent["params"], json!([null, "dead"]));
 }

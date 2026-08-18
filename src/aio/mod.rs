@@ -3,8 +3,10 @@
 //! The runtime is the caller's choice; this crate does not depend on `tokio`.
 
 mod call;
+mod methods;
 
 pub use call::{RpcCallAsync, RpcCallAsyncExt};
+pub use methods::*;
 
 use std::future::Future;
 use std::pin::Pin;
