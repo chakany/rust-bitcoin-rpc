@@ -4,6 +4,7 @@ mod common;
 
 use bitcoin_rpc::aio::{BlockchainRpc, ClientBuilder, RpcCallAsync, RpcCallAsyncExt};
 use bitcoin_rpc::{Auth, Error};
+use common::fixtures::BLOCK_WITH_TXS_REPLY;
 use serde_json::json;
 
 #[tokio::test]
@@ -95,10 +96,6 @@ async fn client_is_shareable_and_futures_are_spawnable() {
     let handle = tokio::spawn(async move { client.call_raw("uptime", json!([])).await });
     assert_eq!(handle.await.unwrap().unwrap(), json!(123));
 }
-
-// A getblock verbosity-2 reply: the most complex blockchain result, exercising a
-// nested object, an array of objects and an absent optional field.
-const BLOCK_WITH_TXS_REPLY: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"hash":"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09","confirmations":799901,"size":285,"strippedsize":285,"weight":1140,"coinbase_tx":{"version":1,"locktime":0,"sequence":4294967295,"coinbase":"04ffff001d0102","witness":"00"},"height":100,"version":1,"versionHex":"00000001","merkleroot":"2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866","tx":[{"txid":"2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866","vin":[],"vout":[],"fee":0.00012345}],"time":1231660825,"mediantime":1231658656,"nonce":2573394689,"bits":"1d00ffff","target":"00000000ffff0000000000000000000000000000000000000000000000000000","difficulty":1.0,"chainwork":"6500650065","nTx":1,"previousblockhash":"000000007bc154e0fa7ea32218a72fe2c1bb9f86cf8c9ebf9a715ed27fdb229a"}}"#;
 
 #[tokio::test]
 async fn get_block_with_txs_sends_verbosity_2_and_deserializes() {

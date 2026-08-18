@@ -1,5 +1,7 @@
 //! A canned-response HTTP server, so the client tests need no mock-HTTP crate.
 
+pub mod fixtures;
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};

@@ -121,6 +121,16 @@ pub struct CoinbaseTx {
 }
 
 /// Result of `getblock` at verbosity 1: the block with transaction ids only.
+///
+/// Shares roughly 20 fields with [`BlockWithTxs`], duplicated rather than
+/// factored into a `#[serde(flatten)]`-ed `BlockCommon` substruct. That would
+/// in fact work despite both structs declaring their own `tx`: serde matches
+/// an outer struct's own declared fields before routing the remainder to the
+/// flatten target, so the two `tx` declarations would not conflict. The
+/// duplication is kept anyway because flattening routes deserialization
+/// through serde's generic `Content` buffer to collect the leftover keys,
+/// and duplicating the fields keeps direct field access instead of a nested
+/// substruct.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Block {
@@ -349,8 +359,9 @@ pub struct DeploymentInfo {
 
 /// The output script of an unspent transaction output.
 ///
-/// Named apart from the raw-transaction script type because `gettxout` documents
-/// its own `scriptPubKey` result independently.
+/// Named apart from the raw-transaction script type because `src/types/mod.rs`
+/// glob re-exports every category module: an unprefixed `ScriptPubKey` here
+/// would collide with the one `rawtx.rs` owns (ruling R20's naming rule).
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TxOutScriptPubKey {
