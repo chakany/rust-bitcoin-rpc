@@ -132,10 +132,8 @@ fn prelude_brings_the_method_traits_into_scope() {
     // would collide with the async traits' identical names), so the nested
     // `prelude::sync` module is what a caller reaches for instead.
     #[cfg(feature = "aio")]
-    #[allow(unused_imports)]
     use bitcoin_rpc::prelude::sync::*;
     #[cfg(not(feature = "aio"))]
-    #[allow(unused_imports)]
     use bitcoin_rpc::prelude::*;
 
     let server = common::MockServer::spawn(vec![(
