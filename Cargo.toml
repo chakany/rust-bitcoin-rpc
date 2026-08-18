@@ -25,3 +25,7 @@ serde = ["dep:serde", "dep:serde_json"]
 sync = ["serde", "dep:ureq"]
 aio = ["serde", "dep:reqwest"]
 tls = ["ureq?/rustls", "reqwest?/rustls"]
+
+[[example]]
+name = "btc-cli"
+required-features = ["aio"]
