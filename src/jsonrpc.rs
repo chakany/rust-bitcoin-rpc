@@ -18,7 +18,12 @@ pub(crate) struct Request<'a> {
 
 impl<'a> Request<'a> {
     pub(crate) fn new(id: u64, method: &'a str, params: Value) -> Self {
-        Request { jsonrpc: "2.0", id, method, params }
+        Request {
+            jsonrpc: "2.0",
+            id,
+            method,
+            params,
+        }
     }
 }
 
@@ -51,7 +56,10 @@ where
 impl Response {
     pub(crate) fn into_result(self) -> Result<Value> {
         if let Some(e) = self.error {
-            return Err(Error::Rpc(RpcError { code: e.code, message: e.message }));
+            return Err(Error::Rpc(RpcError {
+                code: e.code,
+                message: e.message,
+            }));
         }
         self.result
             .ok_or_else(|| Error::Transport("reply contained neither result nor error".into()))
@@ -65,9 +73,17 @@ mod tests {
 
     #[test]
     fn request_serializes_as_jsonrpc_2_0() {
-        let req = Request { jsonrpc: "2.0", id: 7, method: "getblockhash", params: json!([100]) };
+        let req = Request {
+            jsonrpc: "2.0",
+            id: 7,
+            method: "getblockhash",
+            params: json!([100]),
+        };
         let v = serde_json::to_value(&req).unwrap();
-        assert_eq!(v, json!({"jsonrpc":"2.0","id":7,"method":"getblockhash","params":[100]}));
+        assert_eq!(
+            v,
+            json!({"jsonrpc":"2.0","id":7,"method":"getblockhash","params":[100]})
+        );
     }
 
     #[test]
@@ -102,6 +118,9 @@ mod tests {
     fn response_without_result_or_error_is_a_transport_error() {
         let raw = r#"{"jsonrpc":"2.0","id":1}"#;
         let resp: Response = serde_json::from_str(raw).unwrap();
-        assert!(matches!(resp.into_result(), Err(crate::Error::Transport(_))));
+        assert!(matches!(
+            resp.into_result(),
+            Err(crate::Error::Transport(_))
+        ));
     }
 }

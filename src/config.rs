@@ -13,14 +13,21 @@ pub(crate) struct Config {
 
 impl Config {
     pub(crate) fn new(url: impl Into<String>) -> Self {
-        Config { url: url.into(), auth: Auth::None, timeout: Duration::from_secs(30) }
+        Config {
+            url: url.into(),
+            auth: Auth::None,
+            timeout: Duration::from_secs(30),
+        }
     }
 
     pub(crate) fn validate(&self) -> Result<()> {
         if self.url.starts_with("http://") || self.url.starts_with("https://") {
             Ok(())
         } else {
-            Err(Error::Config(format!("url must start with http:// or https://, got `{}`", self.url)))
+            Err(Error::Config(format!(
+                "url must start with http:// or https://, got `{}`",
+                self.url
+            )))
         }
     }
 }

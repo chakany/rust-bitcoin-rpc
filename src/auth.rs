@@ -34,7 +34,10 @@ impl Auth {
     pub(crate) fn header_value(&self) -> Result<Option<String>> {
         match self {
             Auth::None => Ok(None),
-            Auth::UserPass(u, p) => Ok(Some(format!("Basic {}", base64(format!("{u}:{p}").as_bytes())))),
+            Auth::UserPass(u, p) => Ok(Some(format!(
+                "Basic {}",
+                base64(format!("{u}:{p}").as_bytes())
+            ))),
             Auth::CookieFile(path) => {
                 let raw = std::fs::read_to_string(path).map_err(|e| {
                     Error::Config(format!("cannot read cookie file {}: {e}", path.display()))
@@ -64,8 +67,16 @@ fn base64(input: &[u8]) -> String {
         let n = (b0 << 16) | (b1 << 8) | b2;
         out.push(TABLE[(n >> 18) as usize & 63] as char);
         out.push(TABLE[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 { TABLE[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if chunk.len() > 2 { TABLE[n as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            TABLE[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            TABLE[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }

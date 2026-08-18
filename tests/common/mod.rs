@@ -26,12 +26,17 @@ impl MockServer {
 
         std::thread::spawn(move || {
             for (status, body) in replies {
-                let Ok((stream, _)) = listener.accept() else { return };
+                let Ok((stream, _)) = listener.accept() else {
+                    return;
+                };
                 handle(stream, status, &body, &sink);
             }
         });
 
-        MockServer { url: format!("http://{addr}"), received }
+        MockServer {
+            url: format!("http://{addr}"),
+            received,
+        }
     }
 
     pub fn url(&self) -> String {
@@ -47,7 +52,9 @@ impl MockServer {
 // via `sink`) strictly before the reply is written, so a client can never
 // observe the reply before `requests()` reflects the request that earned it.
 fn handle(mut stream: TcpStream, status: u16, body: &str, sink: &Mutex<Vec<ReceivedRequest>>) {
-    let Some((authorization, buf)) = read_request(&mut stream) else { return };
+    let Some((authorization, buf)) = read_request(&mut stream) else {
+        return;
+    };
     sink.lock().expect("lock").push(ReceivedRequest {
         authorization,
         body: String::from_utf8_lossy(&buf).into_owned(),

@@ -28,7 +28,9 @@ impl ClientBuilder {
     /// Start building a client for the node at `url`, e.g.
     /// `http://127.0.0.1:8332`.
     pub fn new(url: impl Into<String>) -> Self {
-        ClientBuilder { config: Config::new(url) }
+        ClientBuilder {
+            config: Config::new(url),
+        }
     }
 
     /// Set the credentials. Defaults to [`Auth::None`].
@@ -53,7 +55,12 @@ impl ClientBuilder {
             .http_status_as_error(false)
             .build()
             .into();
-        Ok(Client { agent, url: self.config.url, authorization, next_id: AtomicU64::new(1) })
+        Ok(Client {
+            agent,
+            url: self.config.url,
+            authorization,
+            next_id: AtomicU64::new(1),
+        })
     }
 }
 
@@ -82,7 +89,9 @@ impl RpcCall for Client {
             request = request.header("Authorization", auth);
         }
 
-        let mut resp = request.send(&body).map_err(|e| Error::Transport(e.to_string()))?;
+        let mut resp = request
+            .send(&body)
+            .map_err(|e| Error::Transport(e.to_string()))?;
         // A 500 from the node still carries a usable JSON-RPC error body.
         let bytes = resp
             .body_mut()

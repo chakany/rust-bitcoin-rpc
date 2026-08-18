@@ -29,7 +29,9 @@ impl ClientBuilder {
     /// Start building a client for the node at `url`, e.g.
     /// `http://127.0.0.1:8332`.
     pub fn new(url: impl Into<String>) -> Self {
-        ClientBuilder { config: Config::new(url) }
+        ClientBuilder {
+            config: Config::new(url),
+        }
     }
 
     /// Set the credentials. Defaults to [`Auth::None`].
@@ -53,7 +55,12 @@ impl ClientBuilder {
             .timeout(self.config.timeout)
             .build()
             .map_err(|e| Error::Config(e.to_string()))?;
-        Ok(Client { http, url: self.config.url, authorization, next_id: AtomicU64::new(1) })
+        Ok(Client {
+            http,
+            url: self.config.url,
+            authorization,
+            next_id: AtomicU64::new(1),
+        })
     }
 }
 
@@ -89,8 +96,14 @@ impl RpcCallAsync for Client {
             }
 
             // No `error_for_status`: a 500 still carries a usable error body.
-            let response = request.send().await.map_err(|e| Error::Transport(e.to_string()))?;
-            let bytes = response.bytes().await.map_err(|e| Error::Transport(e.to_string()))?;
+            let response = request
+                .send()
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?;
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?;
 
             let response: Response = serde_json::from_slice(&bytes)?;
             response.into_result()

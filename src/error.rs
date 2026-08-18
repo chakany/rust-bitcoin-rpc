@@ -73,7 +73,10 @@ mod tests {
 
     #[test]
     fn rpc_error_displays_code_and_message() {
-        let e = Error::Rpc(RpcError { code: -8, message: "Block not found".into() });
+        let e = Error::Rpc(RpcError {
+            code: -8,
+            message: "Block not found".into(),
+        });
         assert_eq!(e.to_string(), "RPC error -8: Block not found");
     }
 

@@ -14,7 +14,10 @@ async fn successful_call_returns_result() {
     )]);
     let client = ClientBuilder::new(server.url()).build().unwrap();
 
-    let v = client.call_raw("getblockchaininfo", json!([])).await.unwrap();
+    let v = client
+        .call_raw("getblockchaininfo", json!([]))
+        .await
+        .unwrap();
     assert_eq!(v, json!({"blocks": 42}));
 
     let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();

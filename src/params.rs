@@ -41,12 +41,18 @@ mod tests {
 
     #[test]
     fn trims_trailing_nulls() {
-        assert_eq!(positional(vec![json!(1), json!(null), json!(null)]), json!([1]));
+        assert_eq!(
+            positional(vec![json!(1), json!(null), json!(null)]),
+            json!([1])
+        );
     }
 
     #[test]
     fn keeps_interior_nulls() {
-        assert_eq!(positional(vec![json!(1), json!(null), json!(3)]), json!([1, null, 3]));
+        assert_eq!(
+            positional(vec![json!(1), json!(null), json!(3)]),
+            json!([1, null, 3])
+        );
     }
 
     #[test]

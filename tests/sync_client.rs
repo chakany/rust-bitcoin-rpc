@@ -99,7 +99,8 @@ fn http_error_status_with_error_body_is_reported_as_rpc_error() {
     // A 1.0-style node or a proxy may answer 500; the body still carries the error.
     let server = common::MockServer::spawn(vec![(
         500,
-        r#"{"result":null,"error":{"code":-32601,"message":"Method not found"},"id":1}"#.to_string(),
+        r#"{"result":null,"error":{"code":-32601,"message":"Method not found"},"id":1}"#
+            .to_string(),
     )]);
     let client = ClientBuilder::new(server.url()).build().unwrap();
 
@@ -126,7 +127,10 @@ fn malformed_response_body_is_a_json_error() {
     let server = common::MockServer::spawn(vec![(200, "not json at all".to_string())]);
     let client = ClientBuilder::new(server.url()).build().unwrap();
 
-    assert!(matches!(client.call_raw("uptime", json!([])), Err(Error::Json(_))));
+    assert!(matches!(
+        client.call_raw("uptime", json!([])),
+        Err(Error::Json(_))
+    ));
 }
 
 // A getblock verbosity-2 reply: the most complex blockchain result, exercising a

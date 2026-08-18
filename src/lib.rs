@@ -4,8 +4,8 @@
 //! async one. Neither is enabled by default.
 #![warn(missing_docs)]
 
-mod error;
 mod auth;
+mod error;
 
 #[cfg(any(feature = "sync", feature = "aio"))]
 mod config;
@@ -22,5 +22,5 @@ pub mod sync;
 #[cfg(feature = "aio")]
 pub mod aio;
 
-pub use error::{Error, RpcError, Result};
 pub use auth::Auth;
+pub use error::{Error, Result, RpcError};
