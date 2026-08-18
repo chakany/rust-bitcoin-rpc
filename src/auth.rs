@@ -31,7 +31,6 @@ impl Auth {
 
     /// Build the `Authorization` header value, reading the cookie file if needed.
     #[cfg(any(feature = "sync", feature = "aio"))]
-    #[allow(dead_code)]
     pub(crate) fn header_value(&self) -> Result<Option<String>> {
         match self {
             Auth::None => Ok(None),
@@ -55,7 +54,6 @@ impl Auth {
 
 /// Minimal standard base64 encoder, so the crate needs no base64 dependency.
 #[cfg(any(feature = "sync", feature = "aio"))]
-#[allow(dead_code)]
 fn base64(input: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);

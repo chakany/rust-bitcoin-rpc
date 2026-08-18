@@ -12,9 +12,12 @@ mod config;
 #[cfg(any(feature = "sync", feature = "aio"))]
 mod jsonrpc;
 #[cfg(any(feature = "sync", feature = "aio"))]
-mod params;
+pub mod params;
 
 pub mod types;
+
+#[cfg(feature = "sync")]
+pub mod sync;
 
 pub use error::{Error, RpcError, Result};
 pub use auth::Auth;

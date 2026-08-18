@@ -1,13 +1,28 @@
 //! Helpers for building JSON-RPC parameter lists.
+//!
+//! Public so downstream crates writing their own RPC-method extension traits
+//! (the pattern this crate itself uses, see [`crate::sync::RpcCall`]) can give
+//! omitted optional arguments the same semantics Bitcoin Core expects.
 
 use serde_json::Value;
 
 /// Build a positional parameter array, dropping trailing `null` entries.
 ///
-/// Bitcoin Core treats an absent trailing argument and an explicit `null`
-/// differently for some methods, so omitted optional arguments must really be
-/// absent from the request.
-pub(crate) fn positional(mut args: Vec<Value>) -> Value {
+/// Bitcoin Core distinguishes an *absent* trailing argument (use the method's
+/// default) from an *explicit* `null` (often a hard error for that argument),
+/// so an omitted optional argument must be dropped from the end of the array,
+/// not sent as `null`. Only trailing `null`s are dropped; an interior `null`
+/// is left in place, since Core does accept `null` there to mean "default for
+/// this one argument" (e.g. `getblock(hash, null, verbosity)`).
+///
+/// ```
+/// use bitcoin_rpc::params::positional;
+/// use serde_json::json;
+///
+/// let (txid, vout) = ("abc123", 0u32);
+/// assert_eq!(positional(vec![json!(txid), json!(vout)]), json!(["abc123", 0]));
+/// ```
+pub fn positional(mut args: Vec<Value>) -> Value {
     while matches!(args.last(), Some(Value::Null)) {
         args.pop();
     }
