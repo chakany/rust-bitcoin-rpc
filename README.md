@@ -23,12 +23,15 @@ Nothing is enabled by default; pick the client(s) you need.
 use bitcoin_rpc::sync::{BlockchainRpc, ClientBuilder};
 use bitcoin_rpc::Auth;
 
+# fn main() -> bitcoin_rpc::Result<()> {
 let client = ClientBuilder::new("http://127.0.0.1:8332")
     .auth(Auth::cookie_file("/home/user/.bitcoin/.cookie"))
     .build()?;
 
 let info = client.get_blockchain_info()?;
 println!("{} blocks on {}", info.blocks, info.chain);
+# Ok(())
+# }
 ```
 
 ## Quickstart: async
@@ -37,21 +40,28 @@ println!("{} blocks on {}", info.blocks, info.chain);
 use bitcoin_rpc::aio::{BlockchainRpc, ClientBuilder};
 use bitcoin_rpc::Auth;
 
+# #[tokio::main]
+# async fn main() -> bitcoin_rpc::Result<()> {
 let client = ClientBuilder::new("http://127.0.0.1:8332")
     .auth(Auth::cookie_file("/home/user/.bitcoin/.cookie"))
     .build()?;
 
 let info = client.get_blockchain_info().await?;
 println!("{} blocks on {}", info.blocks, info.chain);
+# Ok(())
+# }
 ```
 
-Every piece of these two snippets is real and compiles: the
-builder-and-`auth`-and-`build` pattern is exactly what `tests/sync_client.rs`
-and `tests/aio_client.rs` use throughout, `Auth::cookie_file` is unit-tested in
-`src/auth.rs` and used live in `examples/btc-cli.rs`, and the `blocks`/`chain`
-fields on the `get_blockchain_info` result are pinned by the
-`get_blockchain_info_full` fixture test in `tests/serde_fixtures.rs`. Only the
-network round-trip to a real node is untested — see [Scope](#scope).
+These two snippets really do compile: with `sync` and `aio` both enabled,
+this whole README is pulled into the crate root as a doctest (see
+`src/lib.rs`), so `cargo test --features sync,aio --doc` fails if either one
+stops compiling. Beyond compiling, the builder-and-`auth`-and-`build` pattern
+is exactly what `tests/sync_client.rs` and `tests/aio_client.rs` use
+throughout, `Auth::cookie_file` is unit-tested in `src/auth.rs` and used live
+in `examples/btc-cli.rs`, and the `blocks`/`chain` fields on the
+`get_blockchain_info` result are pinned by the `get_blockchain_info_full`
+fixture test in `tests/serde_fixtures.rs`. Only the network round-trip to a
+real node is untested — see [Scope](#scope).
 
 ## Adding your own RPC
 
@@ -86,6 +96,11 @@ The async version is the same shape, using `RpcCallAsync`/`RpcCallAsyncExt`
 and returning `impl Future` instead of a plain `Result`:
 
 ```rust
+# /// A response type a user of this crate would define themselves.
+# #[derive(Debug, serde::Deserialize)]
+# pub struct OrphanTx {
+#     txid: String,
+# }
 use bitcoin_rpc::Result;
 use bitcoin_rpc::aio::{RpcCallAsync, RpcCallAsyncExt};
 use serde_json::json;

@@ -57,3 +57,12 @@ pub mod prelude {
     #[cfg(all(feature = "aio", not(feature = "sync")))]
     pub use aio::*;
 }
+
+// Wires README.md's code samples in as doctests, so `cargo test
+// --features sync,aio --doc` fails if they stop compiling. Only makes sense
+// with both `sync` and `aio` on, since the README shows both clients.
+#[cfg_attr(
+    all(feature = "sync", feature = "aio"),
+    doc = include_str!("../README.md")
+)]
+mod readme_doctest {}
