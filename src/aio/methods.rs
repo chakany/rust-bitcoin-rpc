@@ -269,9 +269,8 @@ pub trait MiningRpc: RpcCallAsync {
         &self,
         request: &BlockTemplateRequest,
     ) -> impl Future<Output = Result<BlockTemplate>> + Send + '_ {
-        // Serialize before entering the async block so only `self` (not
-        // `request`, which may be dropped by the caller before the future
-        // resolves in some usages) needs to outlive the returned future.
+        // Serialize eagerly so a request that cannot be encoded errors here
+        // rather than on the first poll of the returned future.
         let params = serde_json::to_value(request).map(|v| positional(vec![v]));
         async move { self.call("getblocktemplate", params?).await }
     }

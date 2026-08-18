@@ -68,6 +68,32 @@ fn get_blockchain_info_warnings_legacy_string_form() {
     });
     let info: GetBlockchainInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.warnings, vec!["single legacy warning"]);
+
+    // The other half of ruling R25: whichever wire form came in, the public
+    // type serializes `warnings` back out as an array.
+    assert_eq!(
+        serde_json::to_value(&info).unwrap()["warnings"],
+        json!(["single legacy warning"])
+    );
+}
+
+#[test]
+fn get_blockchain_info_warnings_legacy_empty_string_is_no_warnings() {
+    // `GetWarningsForRpc` returns `""`, not a one-element list, when there is
+    // nothing to warn about (`bitcoin/src/node/warnings.cpp:56-58`), so a
+    // caller testing `warnings.is_empty()` must not see a phantom warning.
+    let v = json!({
+        "chain": "main", "blocks": 800000, "headers": 800000,
+        "bestblockhash": "0000000000000000000",
+        "bits": "17034219", "target": "000000000000000000034219",
+        "difficulty": 53911173001054.59, "time": 1690000000,
+        "mediantime": 1689999000, "verificationprogress": 0.9999,
+        "initialblockdownload": false, "chainwork": "00000000000000abc",
+        "size_on_disk": 570000000000_u64, "pruned": false,
+        "warnings": ""
+    });
+    let info: GetBlockchainInfo = serde_json::from_value(v).unwrap();
+    assert!(info.warnings.is_empty(), "got {:?}", info.warnings);
 }
 
 #[test]
