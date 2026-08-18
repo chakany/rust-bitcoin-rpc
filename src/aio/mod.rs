@@ -1,6 +1,12 @@
 //! Async client. Requires the `aio` feature.
 //!
-//! The runtime is the caller's choice; this crate does not depend on `tokio`.
+//! This client is built on [`reqwest`](https://crates.io/crates/reqwest) and
+//! runs on a `tokio` reactor: `tokio` is a mandatory transitive dependency
+//! (via `reqwest` -> `hyper`), and awaiting its futures from another
+//! executor (e.g. `smol`, `async-std`) fails at runtime, not compile time.
+//! This crate has no *direct* dependency on `tokio` (it is a dev-dependency
+//! only, used by this crate's own tests). To opt out of `tokio` entirely,
+//! use the `sync` feature instead.
 
 mod call;
 mod methods;

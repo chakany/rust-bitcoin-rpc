@@ -11,7 +11,7 @@ Nothing is enabled by default; pick the client(s) you need.
 | --- | --- |
 | `serde` | `Serialize`/`Deserialize` on the crate's types. Pulled in automatically by `sync` and `aio`; on its own it adds no client. |
 | `sync` | A blocking client built on [`ureq`]. Links no async runtime. |
-| `aio` | An async client built on [`reqwest`]. The runtime is entirely the caller's choice; this crate itself does not depend on `tokio`. |
+| `aio` | An async client built on [`reqwest`]. Because of that, it runs on a `tokio` reactor: `tokio` is a mandatory transitive dependency (via `reqwest` → `hyper`) and awaiting the client's futures from another executor (e.g. `smol`, `async-std`) fails at runtime. This crate has no *direct* dependency on `tokio` — it's a dev-dependency only, used by this crate's own tests. If you need to opt out of `tokio` entirely, use `sync` instead. |
 | `tls` | TLS support for whichever client(s) are enabled. Rustls only — `native-tls`/OpenSSL is never enabled under any feature combination. `aio` + `tls` needs `cmake` and a C compiler available at build time, to build `aws-lc-sys`. |
 
 [`ureq`]: https://crates.io/crates/ureq
