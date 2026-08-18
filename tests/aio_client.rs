@@ -85,6 +85,21 @@ async fn basic_auth_header_is_sent() {
 }
 
 #[tokio::test]
+async fn timeout_none_builds_a_client_that_still_makes_requests() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":true}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url())
+        .timeout(None)
+        .build()
+        .unwrap();
+
+    let v = client.call_raw("uptime", json!([])).await.unwrap();
+    assert_eq!(v, json!(true));
+}
+
+#[tokio::test]
 async fn unreachable_node_is_a_transport_error() {
     let client = ClientBuilder::new("http://127.0.0.1:1").build().unwrap();
     assert!(matches!(

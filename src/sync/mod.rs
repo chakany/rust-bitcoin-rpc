@@ -39,9 +39,15 @@ impl ClientBuilder {
         self
     }
 
-    /// Set the total per-request timeout. Defaults to 30 seconds.
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.config.timeout = timeout;
+    /// Set the total per-request timeout, or `None` for no timeout at all.
+    /// Defaults to 30 seconds.
+    ///
+    /// A long-polling method (e.g. `wait_for_new_block`) is cut short by
+    /// this timeout well before the RPC-level wait it was asked to make;
+    /// pass `None` here to let those calls block for as long as the node
+    /// takes to reply.
+    pub fn timeout(mut self, timeout: impl Into<Option<Duration>>) -> Self {
+        self.config.timeout = timeout.into();
         self
     }
 
@@ -51,7 +57,7 @@ impl ClientBuilder {
         self.config.validate()?;
         let authorization = self.config.auth.header_value()?;
         let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(self.config.timeout))
+            .timeout_global(self.config.timeout)
             .http_status_as_error(false)
             .build()
             .into();

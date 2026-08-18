@@ -8,7 +8,7 @@ use crate::{Auth, Error, Result};
 pub(crate) struct Config {
     pub url: String,
     pub auth: Auth,
-    pub timeout: Duration,
+    pub timeout: Option<Duration>,
 }
 
 impl Config {
@@ -16,7 +16,7 @@ impl Config {
         Config {
             url: url.into(),
             auth: Auth::None,
-            timeout: Duration::from_secs(30),
+            timeout: Some(Duration::from_secs(30)),
         }
     }
 
@@ -40,7 +40,7 @@ mod tests {
     fn defaults_to_no_auth_and_30s_timeout() {
         let c = Config::new("http://127.0.0.1:8332");
         assert_eq!(c.auth, crate::Auth::None);
-        assert_eq!(c.timeout, std::time::Duration::from_secs(30));
+        assert_eq!(c.timeout, Some(std::time::Duration::from_secs(30)));
     }
 
     #[test]

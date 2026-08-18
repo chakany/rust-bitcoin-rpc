@@ -105,6 +105,21 @@ fn bad_url_fails_at_build_time() {
 }
 
 #[test]
+fn timeout_none_builds_a_client_that_still_makes_requests() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":true}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url())
+        .timeout(None)
+        .build()
+        .unwrap();
+
+    let v = client.call_raw("uptime", json!([])).unwrap();
+    assert_eq!(v, json!(true));
+}
+
+#[test]
 fn http_error_status_with_error_body_is_reported_as_rpc_error() {
     // A 1.0-style node or a proxy may answer 500; the body still carries the error.
     let server = common::MockServer::spawn(vec![(
