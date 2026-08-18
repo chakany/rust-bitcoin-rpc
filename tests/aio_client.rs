@@ -3,10 +3,13 @@
 mod common;
 
 use bitcoin_rpc::aio::{
-    BlockchainRpc, ClientBuilder, MempoolRpc, NetworkRpc, RpcCallAsync, RpcCallAsyncExt,
+    BlockchainRpc, ClientBuilder, MempoolRpc, MiningRpc, NetworkRpc, RpcCallAsync, RpcCallAsyncExt,
 };
+use bitcoin_rpc::types::BlockTemplateRequest;
 use bitcoin_rpc::{Auth, Error};
-use common::fixtures::{BLOCK_WITH_TXS_REPLY, MEMPOOL_ENTRY_REPLY, PEER_INFO_REPLY};
+use common::fixtures::{
+    BLOCK_TEMPLATE_REPLY, BLOCK_WITH_TXS_REPLY, MEMPOOL_ENTRY_REPLY, PEER_INFO_REPLY,
+};
 use serde_json::json;
 
 #[tokio::test]
@@ -282,4 +285,73 @@ async fn add_node_omits_absent_v2transport() {
     let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
     assert_eq!(sent["method"], "addnode");
     assert_eq!(sent["params"], json!(["192.168.0.6:8333", "onetry"]));
+}
+
+#[tokio::test]
+async fn get_block_template_sends_request_object_and_deserializes() {
+    let server = common::MockServer::spawn(vec![(200, BLOCK_TEMPLATE_REPLY.to_string())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let request = BlockTemplateRequest::default();
+    let template = client.get_block_template(&request).await.unwrap();
+    assert_eq!(template.height, 800001);
+    assert_eq!(template.coinbase_value, 625000000);
+    assert_eq!(template.transactions.len(), 1);
+    assert_eq!(template.transactions[0].fee, 1000);
+    assert_eq!(template.vb_available.get("!testdummy"), Some(&28));
+    assert_eq!(template.weight_limit, None);
+
+    // Sent as a single object argument, not a bare array, and the default
+    // request carries the segwit rule Core requires.
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "getblocktemplate");
+    assert_eq!(sent["params"], json!([{"rules": ["segwit"]}]));
+}
+
+#[tokio::test]
+async fn submit_block_returns_none_on_success() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":null}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    assert_eq!(client.submit_block("aabbcc").await.unwrap(), None);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "submitblock");
+    assert_eq!(sent["params"], json!(["aabbcc"]));
+}
+
+#[tokio::test]
+async fn submit_block_returns_rejection_reason() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":"duplicate"}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    assert_eq!(
+        client.submit_block("aabbcc").await.unwrap(),
+        Some("duplicate".to_string())
+    );
+}
+
+#[tokio::test]
+async fn get_network_hash_ps_sends_both_args() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":1234.5}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let hps = client
+        .get_network_hash_ps(Some(120), Some(-1))
+        .await
+        .unwrap();
+    assert_eq!(hps, 1234.5);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "getnetworkhashps");
+    assert_eq!(sent["params"], json!([120, -1]));
 }

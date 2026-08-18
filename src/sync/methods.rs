@@ -11,9 +11,9 @@ use super::call::{RpcCall, RpcCallExt};
 use crate::Result;
 use crate::params::positional;
 use crate::types::{
-    Block, BlockHashAndHeight, BlockHeader, BlockWithTxs, ChainTip, DeploymentInfo,
-    GetBlockchainInfo, GetMempoolInfo, GetNetTotals, GetNetworkInfo, GetRawMempoolSequence,
-    MempoolEntry, PeerInfo, TxOut,
+    Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest, BlockWithTxs,
+    ChainTip, DeploymentInfo, GetBlockchainInfo, GetMempoolInfo, GetMiningInfo, GetNetTotals,
+    GetNetworkInfo, GetRawMempoolSequence, MempoolEntry, PeerInfo, TxOut,
 };
 
 /// Blockchain RPCs.
@@ -222,3 +222,52 @@ pub trait NetworkRpc: RpcCall {
 }
 
 impl<T: RpcCall + ?Sized> NetworkRpc for T {}
+
+/// Mining RPCs.
+pub trait MiningRpc: RpcCall {
+    /// Returns a json object containing mining-related information.
+    fn get_mining_info(&self) -> Result<GetMiningInfo> {
+        self.call("getmininginfo", positional(vec![]))
+    }
+
+    /// Returns data needed to construct a block to work on.
+    ///
+    /// `request` is sent as the single `template_request` object argument; see
+    /// BIPs 22, 23, 9 and 145 for the full specification. Only the default
+    /// `"template"` mode is modelled — `"proposal"` mode returns a different
+    /// result shape.
+    fn get_block_template(&self, request: &BlockTemplateRequest) -> Result<BlockTemplate> {
+        self.call(
+            "getblocktemplate",
+            positional(vec![serde_json::to_value(request)?]),
+        )
+    }
+
+    /// Attempts to submit new block `hex` to the network.
+    ///
+    /// Returns `None` if the block was accepted, or a rejection-reason string
+    /// otherwise, per BIP 22.
+    fn submit_block(&self, hex: &str) -> Result<Option<String>> {
+        self.call("submitblock", positional(vec![json!(hex)]))
+    }
+
+    /// Decodes the given `hex` as a header and submits it as a candidate chain
+    /// tip if valid. Throws when the header is invalid.
+    fn submit_header(&self, hex: &str) -> Result<()> {
+        self.call("submitheader", positional(vec![json!(hex)]))
+    }
+
+    /// Returns the estimated network hashes per second based on the last
+    /// `nblocks` blocks, or since the last difficulty change if `-1`.
+    ///
+    /// `height` estimates the network speed at the time a certain block was
+    /// found instead of using the current tip.
+    fn get_network_hash_ps(&self, nblocks: Option<i64>, height: Option<i64>) -> Result<f64> {
+        self.call(
+            "getnetworkhashps",
+            positional(vec![json!(nblocks), json!(height)]),
+        )
+    }
+}
+
+impl<T: RpcCall + ?Sized> MiningRpc for T {}

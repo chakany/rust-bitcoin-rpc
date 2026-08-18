@@ -783,6 +783,187 @@ fn get_net_totals_full() {
 }
 
 #[test]
+fn get_mining_info_full() {
+    let v = json!({
+        "blocks": 800000, "currentblockweight": 4000000_u64, "currentblocktx": 2500,
+        "bits": "170d6b91", "difficulty": 53911173001054.59,
+        "target": "0000000000000000000340190000000000000000000000000000000000000",
+        "networkhashps": 350000000000000000000.0, "pooledtx": 120,
+        "blockmintxfee": 0.00001000, "chain": "main", "signet_challenge": "51",
+        "next": {
+            "height": 800001, "bits": "170d6b90", "difficulty": 53911173001054.6,
+            "target": "0000000000000000000340180000000000000000000000000000000000000",
+            // Planted to prove unknown-field tolerance nested inside a child struct.
+            "some_nested_field_from_a_future_release": 1
+        },
+        "warnings": ["This is a pre-release test build"]
+    });
+    let info: GetMiningInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.blocks, 800000);
+    assert_eq!(info.current_block_weight, Some(4000000));
+    assert_eq!(info.current_block_tx, Some(2500));
+    assert_eq!(info.bits, "170d6b91");
+    assert_eq!(info.difficulty, 53911173001054.59);
+    // networkhashps is a plain NUM (a double), not STR_AMOUNT, but still f64.
+    assert_eq!(info.network_hash_ps, 350000000000000000000.0);
+    assert_eq!(info.pooled_tx, 120);
+    // blockmintxfee is the one STR_AMOUNT in mining.cpp: an unquoted JSON number.
+    assert_eq!(info.block_min_tx_fee, 0.00001000);
+    assert_eq!(info.chain, "main");
+    assert_eq!(info.signet_challenge.as_deref(), Some("51"));
+    assert_eq!(info.next.height, 800001);
+    assert_eq!(info.next.bits, "170d6b90");
+    assert_eq!(info.next.difficulty, 53911173001054.6);
+    assert_eq!(
+        info.warnings,
+        vec!["This is a pre-release test build".to_string()]
+    );
+}
+
+#[test]
+fn get_mining_info_minimal_and_forward_compatible() {
+    let v = json!({
+        "blocks": 0, "bits": "207fffff", "difficulty": 4.656542373871732e-10,
+        "target": "7fffff0000000000", "networkhashps": 0.0, "pooledtx": 0,
+        "blockmintxfee": 0.00001000, "chain": "regtest",
+        "next": {
+            "height": 1, "bits": "207fffff", "difficulty": 4.656542373871732e-10,
+            "target": "7fffff0000000000"
+        },
+        "warnings": [],
+        "some_field_from_a_future_release": 1
+    });
+    let info: GetMiningInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.current_block_weight, None);
+    assert_eq!(info.current_block_tx, None);
+    assert_eq!(info.signet_challenge, None);
+    assert!(info.warnings.is_empty());
+}
+
+#[test]
+fn get_mining_info_warnings_legacy_string_form() {
+    // A node run with `-deprecatedrpc=warnings` emits a bare string instead of
+    // an array; ruling R25 requires both wire shapes to deserialize.
+    let v = json!({
+        "blocks": 0, "bits": "207fffff", "difficulty": 4.656542373871732e-10,
+        "target": "7fffff0000000000", "networkhashps": 0.0, "pooledtx": 0,
+        "blockmintxfee": 0.00001000, "chain": "regtest",
+        "next": {
+            "height": 1, "bits": "207fffff", "difficulty": 4.656542373871732e-10,
+            "target": "7fffff0000000000"
+        },
+        "warnings": "single legacy warning"
+    });
+    let info: GetMiningInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.warnings, vec!["single legacy warning"]);
+}
+
+#[test]
+fn block_template_full() {
+    let v = json!({
+        "version": 536870912, "rules": ["csv", "!segwit"],
+        "vbavailable": {"!testdummy": 28}, "capabilities": ["proposal"],
+        "vbrequired": 0,
+        "previousblockhash": "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054",
+        "transactions": [
+            {
+                "data": "0200000001abcd",
+                "txid": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
+                "hash": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
+                "depends": [1], "fee": 1000, "sigops": 4, "weight": 565
+            }
+        ],
+        "coinbaseaux": {"flags": ""},
+        "coinbasevalue": 625000000_u64,
+        "longpollid": "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a05412345",
+        "target": "0000000000000000000340190000000000000000000000000000000000000",
+        "mintime": 1690000000, "mutable": ["time", "transactions", "prevblock"],
+        "noncerange": "00000000ffffffff", "sigoplimit": 80000, "sizelimit": 4000000,
+        "weightlimit": 4000000_u64, "curtime": 1690000100, "bits": "170d6b91",
+        "height": 800001, "signet_challenge": "51",
+        "default_witness_commitment": "6a24aa21a9ed00"
+    });
+    let tpl: BlockTemplate = serde_json::from_value(v).unwrap();
+    assert_eq!(tpl.version, 536870912);
+    assert_eq!(tpl.rules, vec!["csv", "!segwit"]);
+    assert_eq!(tpl.vb_available.get("!testdummy"), Some(&28));
+    assert_eq!(tpl.capabilities, vec!["proposal"]);
+    assert_eq!(tpl.vb_required, 0);
+    assert!(tpl.previous_block_hash.starts_with("00000000"));
+    assert_eq!(tpl.transactions.len(), 1);
+    let tx = &tpl.transactions[0];
+    assert_eq!(tx.depends, vec![1]);
+    // fee/sigops/weight are raw satoshi/count integers per BIP 22, not f64.
+    assert_eq!(tx.fee, 1000);
+    assert_eq!(tx.sig_ops, 4);
+    assert_eq!(tx.weight, 565);
+    assert_eq!(tpl.coinbase_aux.get("flags"), Some(&"".to_string()));
+    // coinbasevalue is a raw CAmount integer, not run through ValueFromAmount.
+    assert_eq!(tpl.coinbase_value, 625000000);
+    assert_eq!(tpl.min_time, 1690000000);
+    assert_eq!(tpl.mutable, vec!["time", "transactions", "prevblock"]);
+    assert_eq!(tpl.sigop_limit, 80000);
+    assert_eq!(tpl.size_limit, 4000000);
+    assert_eq!(tpl.weight_limit, Some(4000000));
+    assert_eq!(tpl.cur_time, 1690000100);
+    assert_eq!(tpl.height, 800001);
+    assert_eq!(tpl.signet_challenge.as_deref(), Some("51"));
+    assert_eq!(
+        tpl.default_witness_commitment.as_deref(),
+        Some("6a24aa21a9ed00")
+    );
+}
+
+#[test]
+fn block_template_minimal_and_forward_compatible() {
+    let v = json!({
+        "version": 536870912, "rules": [], "vbavailable": {}, "capabilities": [],
+        "vbrequired": 0,
+        "previousblockhash": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+        "transactions": [], "coinbaseaux": {}, "coinbasevalue": 5000000000_u64,
+        "longpollid": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e22061",
+        "target": "7fffff0000000000", "mintime": 1296688602, "mutable": ["time"],
+        "noncerange": "00000000ffffffff", "sigoplimit": 80000, "sizelimit": 4000000,
+        "curtime": 1296688602, "bits": "207fffff", "height": 1,
+        "some_field_from_a_future_release": 1
+    });
+    let tpl: BlockTemplate = serde_json::from_value(v).unwrap();
+    assert!(tpl.rules.is_empty());
+    assert!(tpl.transactions.is_empty());
+    assert_eq!(tpl.weight_limit, None);
+    assert_eq!(tpl.signet_challenge, None);
+    assert_eq!(tpl.default_witness_commitment, None);
+}
+
+#[test]
+fn block_template_request_default_sets_segwit_rule_only() {
+    let req = BlockTemplateRequest::default();
+    assert_eq!(req.rules, vec!["segwit".to_string()]);
+    assert_eq!(req.mode, None);
+    // Absent optionals must be omitted, not serialized as explicit nulls,
+    // since `positional` only trims trailing nulls at the top level.
+    assert_eq!(
+        serde_json::to_value(&req).unwrap(),
+        json!({"rules": ["segwit"]})
+    );
+}
+
+#[test]
+fn block_template_request_round_trips_all_fields() {
+    let req = BlockTemplateRequest {
+        mode: Some("template".to_string()),
+        capabilities: Some(vec!["coinbasevalue".to_string()]),
+        rules: vec!["segwit".to_string()],
+        longpoll_id: Some("abc123".to_string()),
+        data: Some("deadbeef".to_string()),
+    };
+    let v = serde_json::to_value(&req).unwrap();
+    assert_eq!(v["longpollid"], "abc123");
+    let back: BlockTemplateRequest = serde_json::from_value(v).unwrap();
+    assert_eq!(back, req);
+}
+
+#[test]
 fn get_net_totals_forward_compatible() {
     // Every field is required in `getnettotals`'s RPCResult, so this test's
     // forward-compatibility burden falls entirely on the unknown field.
