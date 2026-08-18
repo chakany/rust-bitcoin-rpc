@@ -94,6 +94,23 @@ async fn unreachable_node_is_a_transport_error() {
 }
 
 #[tokio::test]
+async fn http_401_with_empty_body_is_a_transport_error_mentioning_credentials() {
+    // Bitcoin Core answers a failed auth check with HTTP 401 and an empty
+    // body (src/httprpc.cpp), so this is the regression guard for the
+    // most common misconfiguration surfacing as an unhelpful JSON error.
+    let server = common::MockServer::spawn(vec![(401, String::new())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    match client.call_raw("uptime", json!([])).await {
+        Err(Error::Transport(m)) => {
+            assert!(m.contains("401"), "message was: {m}");
+            assert!(m.to_lowercase().contains("credentials"), "message was: {m}");
+        }
+        other => panic!("expected Transport error, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn client_is_shareable_and_futures_are_spawnable() {
     let server = common::MockServer::spawn(vec![(
         200,

@@ -102,6 +102,7 @@ mod aio_ext {
     use bitcoin_rpc::aio::{RpcCallAsync, RpcCallAsyncExt};
     use std::future::Future;
 
+    /// Written exactly as a downstream crate would, for an RPC we do not ship.
     pub trait OrphanRpc: RpcCallAsync {
         fn get_orphan_txs(&self) -> impl Future<Output = Result<Vec<OrphanTx>>> + Send + '_ {
             self.call("getorphantxs", json!([2]))

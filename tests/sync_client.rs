@@ -133,6 +133,23 @@ fn default_auth_sends_no_authorization_header() {
 }
 
 #[test]
+fn http_401_with_empty_body_is_a_transport_error_mentioning_credentials() {
+    // Bitcoin Core answers a failed auth check with HTTP 401 and an empty
+    // body (src/httprpc.cpp), so this is the regression guard for the
+    // most common misconfiguration surfacing as an unhelpful JSON error.
+    let server = common::MockServer::spawn(vec![(401, String::new())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    match client.call_raw("uptime", json!([])) {
+        Err(Error::Transport(m)) => {
+            assert!(m.contains("401"), "message was: {m}");
+            assert!(m.to_lowercase().contains("credentials"), "message was: {m}");
+        }
+        other => panic!("expected Transport error, got {other:?}"),
+    }
+}
+
+#[test]
 fn malformed_response_body_is_a_json_error() {
     let server = common::MockServer::spawn(vec![(200, "not json at all".to_string())]);
     let client = ClientBuilder::new(server.url()).build().unwrap();

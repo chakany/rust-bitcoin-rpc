@@ -16,7 +16,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::jsonrpc::{Request, Response};
+use crate::jsonrpc::{Request, parse_reply};
 use crate::{Auth, Error, Result};
 
 /// Builds a [`Client`].
@@ -100,13 +100,13 @@ impl RpcCallAsync for Client {
                 .send()
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?;
+            let status = response.status().as_u16();
             let bytes = response
                 .bytes()
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?;
 
-            let response: Response = serde_json::from_slice(&bytes)?;
-            response.into_result()
+            parse_reply(status, &bytes)
         })
     }
 }

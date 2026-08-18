@@ -29,7 +29,9 @@ impl fmt::Display for RpcError {
 pub enum Error {
     /// The client was misconfigured: bad URL, unreadable or malformed cookie file.
     Config(String),
-    /// The HTTP request failed before a JSON-RPC reply was obtained.
+    /// The HTTP request failed outright, or a reply arrived that was not a
+    /// usable JSON-RPC message; in the latter case the message names the
+    /// HTTP status the node returned.
     Transport(String),
     /// The reply body was not the JSON we expected.
     #[cfg(feature = "serde")]

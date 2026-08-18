@@ -15,7 +15,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::jsonrpc::{Request, Response};
+use crate::jsonrpc::{Request, parse_reply};
 use crate::{Auth, Error, Result};
 
 /// Builds a [`Client`].
@@ -92,13 +92,13 @@ impl RpcCall for Client {
         let mut resp = request
             .send(&body)
             .map_err(|e| Error::Transport(e.to_string()))?;
+        let status = resp.status().as_u16();
         // A 500 from the node still carries a usable JSON-RPC error body.
         let bytes = resp
             .body_mut()
             .read_to_vec()
             .map_err(|e| Error::Transport(e.to_string()))?;
 
-        let response: Response = serde_json::from_slice(&bytes)?;
-        response.into_result()
+        parse_reply(status, &bytes)
     }
 }
