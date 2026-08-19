@@ -109,6 +109,36 @@ mod aio_ext {
         }
     }
     impl<T: RpcCallAsync + ?Sized> OrphanRpc for T {}
+
+    /// It must work through a trait object too.
+    pub async fn via_dyn(client: &dyn RpcCallAsync) -> Result<usize> {
+        Ok(client.get_orphan_txs().await?.len())
+    }
+}
+
+#[cfg(feature = "aio")]
+#[tokio::test]
+async fn user_async_extension_works_on_client_and_on_dyn() {
+    use aio_ext::OrphanRpc;
+    use bitcoin_rpc::aio::{ClientBuilder, RpcCallAsync};
+
+    let body = r#"{"jsonrpc":"2.0","id":1,"result":[{"txid":"aa"},{"txid":"bb"}]}"#;
+    let server = common::MockServer::spawn(vec![(200, body.to_string()), (200, body.to_string())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    // directly on the concrete client
+    let txs = client.get_orphan_txs().await.unwrap();
+    assert_eq!(txs[0].txid, "aa");
+
+    // and through a trait object: pins the claim at src/aio/call.rs that
+    // boxing the returned future keeps `RpcCallAsync` object-safe.
+    let boxed: Box<dyn RpcCallAsync> = Box::new(ClientBuilder::new(server.url()).build().unwrap());
+    assert_eq!(aio_ext::via_dyn(boxed.as_ref()).await.unwrap(), 2);
+
+    // the params we promised
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["method"], "getorphantxs");
+    assert_eq!(sent["params"], json!([2]));
 }
 
 #[cfg(feature = "aio")]

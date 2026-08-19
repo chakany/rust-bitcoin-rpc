@@ -165,6 +165,23 @@ fn http_401_with_empty_body_is_a_transport_error_mentioning_credentials() {
 }
 
 #[test]
+fn reply_with_both_result_and_error_reports_the_error() {
+    // Error-wins precedence is documented in `Response::into_result`
+    // (src/jsonrpc.rs) but nothing pinned it before this test.
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":42,"error":{"code":-8,"message":"Block not found"}}"#
+            .to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    match client.call_raw("getblockhash", json!([999999999])) {
+        Err(Error::Rpc(e)) => assert_eq!(e.code, -8),
+        other => panic!("expected Rpc error, got {other:?}"),
+    }
+}
+
+#[test]
 fn malformed_response_body_is_a_json_error() {
     let server = common::MockServer::spawn(vec![(200, "not json at all".to_string())]);
     let client = ClientBuilder::new(server.url()).build().unwrap();
@@ -611,4 +628,137 @@ fn control_rpcs_send_expected_params_and_deserialize_string_results() {
     let sent: serde_json::Value = serde_json::from_str(&server.requests()[2].body).unwrap();
     assert_eq!(sent["method"], "help");
     assert_eq!(sent["params"], json!(["getblockcount"]));
+}
+
+#[test]
+fn all_44_typed_methods_send_the_expected_wire_form() {
+    // A method's whole behaviour can be a hardcoded literal argument (the
+    // verbosity/verbose constants below); the 53 fixture tests only check
+    // deserialization, so a swapped literal would ship silently without a
+    // test like this one that pins every method's outgoing (method, params).
+    // The result of every call is discarded: only the wire form matters here.
+    let reply = || (200, r#"{"jsonrpc":"2.0","id":1,"result":null}"#.to_string());
+    let server = common::MockServer::spawn(std::iter::repeat_with(reply).take(44).collect());
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let inputs = [CreateRawTransactionInput {
+        txid: "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b".to_string(),
+        vout: 1,
+        sequence: None,
+    }];
+    let outputs = [CreateRawTransactionOutput::Address {
+        address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
+        amount: 0.01,
+    }];
+    let raw_txs = ["0200000001abcdef".to_string()];
+    let request = BlockTemplateRequest::default();
+
+    let _ = client.get_blockchain_info();
+    let _ = client.get_best_block_hash();
+    let _ = client.get_block_count();
+    let _ = client.get_block_hash(800000);
+    let _ = client.get_block_hex("h1");
+    let _ = client.get_block("h1");
+    let _ = client.get_block_with_txs("h1");
+    let _ = client.get_block_header("h1");
+    let _ = client.get_block_header_hex("h1");
+    let _ = client.get_chain_tips();
+    let _ = client.get_difficulty();
+    let _ = client.get_deployment_info(Some("h1"));
+    let _ = client.get_tx_out("txid1", 0, Some(true));
+    let _ = client.wait_for_new_block(Some(5000), Some("tip1"));
+    let _ = client.wait_for_block_height(800000, Some(5000));
+    let _ = client.get_mempool_info();
+    let _ = client.get_raw_mempool();
+    let _ = client.get_raw_mempool_verbose();
+    let _ = client.get_raw_mempool_with_sequence();
+    let _ = client.get_mempool_entry("txid1");
+    let _ = client.get_network_info();
+    let _ = client.get_peer_info();
+    let _ = client.get_connection_count();
+    let _ = client.get_net_totals();
+    let _ = client.add_node("1.2.3.4:8333", "add", Some(true));
+    let _ = client.disconnect_node(Some("addr1"), Some(7));
+    let _ = client.get_mining_info();
+    let _ = client.get_block_template(&request);
+    let _ = client.submit_block("aabbcc");
+    let _ = client.submit_header("aabbcc");
+    let _ = client.get_network_hash_ps(Some(120), Some(-1));
+    let _ = client.get_raw_transaction_hex("txid1", Some("bh1"));
+    let _ = client.get_raw_transaction("txid1", Some("bh1"));
+    let _ = client.send_raw_transaction("hex1", Some(0.1), Some(0.01));
+    let _ = client.create_raw_transaction(&inputs, &outputs, Some(800000), Some(true), Some(2));
+    let _ = client.decode_raw_transaction("hex1", Some(true));
+    let _ = client.test_mempool_accept(&raw_txs, Some(0.5));
+    let _ = client.estimate_smart_fee(6, Some("conservative"));
+    let _ = client.uptime();
+    let _ = client.stop();
+    let _ = client.help(Some("getblockcount"));
+    let _ = client.get_rpc_info();
+    let _ = client.validate_address("addr1");
+    let _ = client.get_index_info(Some("txindex"));
+
+    let expected: &[(&str, serde_json::Value)] = &[
+        ("getblockchaininfo", json!([])),
+        ("getbestblockhash", json!([])),
+        ("getblockcount", json!([])),
+        ("getblockhash", json!([800000])),
+        ("getblock", json!(["h1", 0])),
+        ("getblock", json!(["h1", 1])),
+        ("getblock", json!(["h1", 2])),
+        ("getblockheader", json!(["h1", true])),
+        ("getblockheader", json!(["h1", false])),
+        ("getchaintips", json!([])),
+        ("getdifficulty", json!([])),
+        ("getdeploymentinfo", json!(["h1"])),
+        ("gettxout", json!(["txid1", 0, true])),
+        ("waitfornewblock", json!([5000, "tip1"])),
+        ("waitforblockheight", json!([800000, 5000])),
+        ("getmempoolinfo", json!([])),
+        ("getrawmempool", json!([false])),
+        ("getrawmempool", json!([true])),
+        ("getrawmempool", json!([false, true])),
+        ("getmempoolentry", json!(["txid1"])),
+        ("getnetworkinfo", json!([])),
+        ("getpeerinfo", json!([])),
+        ("getconnectioncount", json!([])),
+        ("getnettotals", json!([])),
+        ("addnode", json!(["1.2.3.4:8333", "add", true])),
+        ("disconnectnode", json!(["addr1", 7])),
+        ("getmininginfo", json!([])),
+        ("getblocktemplate", json!([{"rules": ["segwit"]}])),
+        ("submitblock", json!(["aabbcc"])),
+        ("submitheader", json!(["aabbcc"])),
+        ("getnetworkhashps", json!([120, -1])),
+        ("getrawtransaction", json!(["txid1", 0, "bh1"])),
+        ("getrawtransaction", json!(["txid1", 1, "bh1"])),
+        ("sendrawtransaction", json!(["hex1", 0.1, 0.01])),
+        (
+            "createrawtransaction",
+            json!([
+                [{"txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b", "vout": 1}],
+                [{"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4": 0.01}],
+                800000,
+                true,
+                2
+            ]),
+        ),
+        ("decoderawtransaction", json!(["hex1", true])),
+        ("testmempoolaccept", json!([["0200000001abcdef"], 0.5])),
+        ("estimatesmartfee", json!([6, "conservative"])),
+        ("uptime", json!([])),
+        ("stop", json!([])),
+        ("help", json!(["getblockcount"])),
+        ("getrpcinfo", json!([])),
+        ("validateaddress", json!(["addr1"])),
+        ("getindexinfo", json!(["txindex"])),
+    ];
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), expected.len(), "expected 44 requests");
+    for (i, (method, params)) in expected.iter().enumerate() {
+        let sent: serde_json::Value = serde_json::from_str(&requests[i].body).unwrap();
+        assert_eq!(sent["method"], *method, "request #{i}");
+        assert_eq!(&sent["params"], params, "request #{i} ({method})");
+    }
 }
