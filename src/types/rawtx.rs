@@ -7,7 +7,10 @@
 //! covers every caller; the fields only one caller supplies are optional.
 
 /// A transaction output script, as emitted by `ScriptToUniv`
-/// (`bitcoin/src/core_io.cpp:409`).
+/// (`bitcoin/src/core_io.cpp:409`) with `include_hex=true, include_address=true`.
+/// Used both for transaction outputs (here) and for [`crate::types::TxOut`]
+/// returned by `gettxout` (`bitcoin/src/rpc/blockchain.cpp:1253`), which calls
+/// `ScriptToUniv` with the same arguments.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ScriptPubKey {

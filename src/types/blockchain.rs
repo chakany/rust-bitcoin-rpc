@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 
-use super::rawtx::Transaction;
+use super::rawtx::{ScriptPubKey, Transaction};
 
 /// Result of `getblockchaininfo`.
 #[derive(Debug, Clone, PartialEq)]
@@ -372,28 +372,6 @@ pub struct DeploymentInfo {
     pub deployments: BTreeMap<String, Deployment>,
 }
 
-/// The output script of an unspent transaction output.
-///
-/// Named apart from the raw-transaction script type because `src/types/mod.rs`
-/// glob re-exports every category module: an unprefixed `ScriptPubKey` here
-/// would collide with the one `rawtx.rs` owns (ruling R20's naming rule).
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct TxOutScriptPubKey {
-    /// Disassembly of the output script.
-    pub asm: String,
-    /// Inferred descriptor for the output.
-    pub desc: String,
-    /// The raw output script bytes, hex-encoded.
-    pub hex: String,
-    /// The type, e.g. `pubkeyhash`.
-    #[cfg_attr(feature = "serde", serde(rename = "type"))]
-    pub script_type: String,
-    /// The Bitcoin address. Only present if a well-defined address exists.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub address: Option<String>,
-}
-
 /// Result of `gettxout` when the output was found.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -407,7 +385,7 @@ pub struct TxOut {
     pub value: f64,
     /// The output script.
     #[cfg_attr(feature = "serde", serde(rename = "scriptPubKey"))]
-    pub script_pub_key: TxOutScriptPubKey,
+    pub script_pub_key: ScriptPubKey,
     /// Coinbase or not.
     pub coinbase: bool,
 }
