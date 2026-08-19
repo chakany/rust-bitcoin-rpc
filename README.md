@@ -1,7 +1,17 @@
-# bitcoin-rpc
+# bitcoind-rpc-client
 
 A JSON-RPC client for Bitcoin Core v31.1, with blocking and async
 implementations that share one typed method set.
+
+## Install
+
+```toml
+[dependencies]
+bitcoind-rpc-client = { version = "0.1", features = ["sync"] }  # or ["aio"], or both
+```
+
+The library is imported as `bitcoin_rpc`, not as `bitcoind_rpc_client` — the
+package name is the long one, the crate you `use` is the short one.
 
 ## Features
 

@@ -3,6 +3,8 @@
 //! Enable the `sync` feature for a blocking client or the `aio` feature for an
 //! async one. Neither is enabled by default.
 #![warn(missing_docs)]
+// Lets docs.rs label which feature gates each item; nightly-only, so docs.rs only.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod auth;
 mod error;
@@ -12,14 +14,17 @@ mod config;
 #[cfg(any(feature = "sync", feature = "aio"))]
 mod jsonrpc;
 #[cfg(any(feature = "sync", feature = "aio"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "sync", feature = "aio"))))]
 pub mod params;
 
 pub mod types;
 
 #[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 pub mod sync;
 
 #[cfg(feature = "aio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "aio")))]
 pub mod aio;
 
 pub use auth::Auth;
@@ -33,6 +38,7 @@ pub use error::{Error, Result, RpcError};
 pub mod prelude {
     /// Blocking traits.
     #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
     pub mod sync {
         pub use crate::params::positional;
         pub use crate::sync::{
@@ -43,6 +49,7 @@ pub mod prelude {
 
     /// Async traits.
     #[cfg(feature = "aio")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "aio")))]
     pub mod aio {
         pub use crate::aio::{
             BlockchainRpc, Client, ClientBuilder, ControlRpc, FeeRpc, MempoolRpc, MiningRpc,

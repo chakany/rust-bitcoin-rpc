@@ -1,12 +1,18 @@
 [package]
-name = "bitcoin-rpc"
+name = "bitcoind-rpc-client"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 description = "JSON-RPC client for Bitcoin Core v31.1, with sync and async implementations"
+repository = "https://github.com/jakubtrnka/rust-bitcoin-rpc"
+documentation = "https://docs.rs/bitcoind-rpc-client"
+readme = "README.md"
 keywords = ["bitcoin", "rpc", "jsonrpc", "bitcoind"]
 categories = ["api-bindings"]
+
+[lib]
+name = "bitcoin_rpc"
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
@@ -29,3 +35,7 @@ tls = ["ureq?/rustls", "reqwest?/rustls"]
 [[example]]
 name = "btc-cli"
 required-features = ["aio"]
+
+[package.metadata.docs.rs]
+features = ["sync", "aio", "serde"]
+rustdoc-args = ["--cfg", "docsrs"]
