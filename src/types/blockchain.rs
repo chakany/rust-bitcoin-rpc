@@ -11,7 +11,7 @@ use super::rawtx::{ScriptPubKey, Transaction};
 /// Result of `getblockchaininfo`.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct GetBlockchainInfo {
+pub struct BlockchainInfo {
     /// Current network name.
     pub chain: String,
     /// The height of the most-work fully-validated chain.

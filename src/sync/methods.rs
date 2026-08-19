@@ -12,17 +12,17 @@ use crate::Result;
 use crate::params::positional;
 use crate::types::{
     Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest, BlockWithTxs,
-    ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput, DeploymentInfo,
-    EstimateSmartFee, GetBlockchainInfo, GetMempoolInfo, GetMiningInfo, GetNetTotals,
-    GetNetworkInfo, GetRawMempoolSequence, GetRpcInfo, IndexInfo, MempoolEntry, PeerInfo,
-    TestMempoolAcceptResult, Transaction, TxOut, ValidateAddress,
+    BlockchainInfo, ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput,
+    DeploymentInfo, FeeEstimate, IndexInfo, MempoolEntry, MempoolInfo, MiningInfo, NetTotals,
+    NetworkInfo, PeerInfo, RawMempoolSequence, RpcInfo, TestMempoolAcceptResult, Transaction,
+    TxOut, ValidateAddress,
 };
 
 /// Blockchain RPCs.
 pub trait BlockchainRpc: RpcCall {
     /// Returns an object containing various state info regarding blockchain
     /// processing.
-    fn get_blockchain_info(&self) -> Result<GetBlockchainInfo> {
+    fn get_blockchain_info(&self) -> Result<BlockchainInfo> {
         self.call("getblockchaininfo", positional(vec![]))
     }
 
@@ -153,7 +153,7 @@ impl<T: RpcCall + ?Sized> BlockchainRpc for T {}
 /// Mempool RPCs.
 pub trait MempoolRpc: RpcCall {
     /// Returns details on the active state of the TX memory pool.
-    fn get_mempool_info(&self) -> Result<GetMempoolInfo> {
+    fn get_mempool_info(&self) -> Result<MempoolInfo> {
         self.call("getmempoolinfo", positional(vec![]))
     }
 
@@ -171,7 +171,7 @@ pub trait MempoolRpc: RpcCall {
 
     /// Returns the transaction ids in the mempool together with the mempool
     /// sequence number, as of the moment the list was generated.
-    fn get_raw_mempool_with_sequence(&self) -> Result<GetRawMempoolSequence> {
+    fn get_raw_mempool_with_sequence(&self) -> Result<RawMempoolSequence> {
         self.call("getrawmempool", positional(vec![json!(false), json!(true)]))
     }
 
@@ -187,7 +187,7 @@ impl<T: RpcCall + ?Sized> MempoolRpc for T {}
 pub trait NetworkRpc: RpcCall {
     /// Returns an object containing various state info regarding P2P
     /// networking.
-    fn get_network_info(&self) -> Result<GetNetworkInfo> {
+    fn get_network_info(&self) -> Result<NetworkInfo> {
         self.call("getnetworkinfo", positional(vec![]))
     }
 
@@ -204,7 +204,7 @@ pub trait NetworkRpc: RpcCall {
 
     /// Returns information about network traffic, including bytes in, bytes
     /// out, and current system time.
-    fn get_net_totals(&self) -> Result<GetNetTotals> {
+    fn get_net_totals(&self) -> Result<NetTotals> {
         self.call("getnettotals", positional(vec![]))
     }
 
@@ -236,7 +236,7 @@ impl<T: RpcCall + ?Sized> NetworkRpc for T {}
 /// Mining RPCs.
 pub trait MiningRpc: RpcCall {
     /// Returns a json object containing mining-related information.
-    fn get_mining_info(&self) -> Result<GetMiningInfo> {
+    fn get_mining_info(&self) -> Result<MiningInfo> {
         self.call("getmininginfo", positional(vec![]))
     }
 
@@ -413,7 +413,7 @@ pub trait FeeRpc: RpcCall {
         &self,
         conf_target: u32,
         estimate_mode: Option<&str>,
-    ) -> Result<EstimateSmartFee> {
+    ) -> Result<FeeEstimate> {
         self.call(
             "estimatesmartfee",
             positional(vec![json!(conf_target), json!(estimate_mode)]),
@@ -446,7 +446,7 @@ pub trait ControlRpc: RpcCall {
     }
 
     /// Returns details of the RPC server.
-    fn get_rpc_info(&self) -> Result<GetRpcInfo> {
+    fn get_rpc_info(&self) -> Result<RpcInfo> {
         self.call("getrpcinfo", positional(vec![]))
     }
 }

@@ -9,7 +9,7 @@
 /// Result of `getrpcinfo`.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct GetRpcInfo {
+pub struct RpcInfo {
     /// All active commands.
     pub active_commands: Vec<RpcInfoCommand>,
     /// The complete file path to the debug log.
@@ -17,7 +17,7 @@ pub struct GetRpcInfo {
 }
 
 /// Information about one active command, held in
-/// [`GetRpcInfo::active_commands`].
+/// [`RpcInfo::active_commands`].
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RpcInfoCommand {

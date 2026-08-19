@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 /// Result of `getnetworkinfo`.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct GetNetworkInfo {
+pub struct NetworkInfo {
     /// The server version.
     pub version: u64,
     /// The server subversion string.
@@ -63,7 +63,7 @@ pub struct GetNetworkInfo {
     pub warnings: Vec<String>,
 }
 
-/// One entry of [`GetNetworkInfo::networks`].
+/// One entry of [`NetworkInfo::networks`].
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetworkEntry {
@@ -79,7 +79,7 @@ pub struct NetworkEntry {
     pub proxy_randomize_credentials: bool,
 }
 
-/// One entry of [`GetNetworkInfo::local_addresses`].
+/// One entry of [`NetworkInfo::local_addresses`].
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LocalAddress {
@@ -211,7 +211,7 @@ pub struct PeerInfo {
 /// Result of `getnettotals`.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct GetNetTotals {
+pub struct NetTotals {
     /// Total bytes received.
     #[cfg_attr(feature = "serde", serde(rename = "totalbytesrecv"))]
     pub total_bytes_recv: u64,
@@ -226,7 +226,7 @@ pub struct GetNetTotals {
     pub upload_target: UploadTarget,
 }
 
-/// The outbound traffic limit state, held in [`GetNetTotals::upload_target`].
+/// The outbound traffic limit state, held in [`NetTotals::upload_target`].
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct UploadTarget {

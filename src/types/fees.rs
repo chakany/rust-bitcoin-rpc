@@ -11,7 +11,7 @@
 /// `errors` carries the reason instead.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct EstimateSmartFee {
+pub struct FeeEstimate {
     /// Estimate fee rate in BTC/kvB (only present if no errors were
     /// encountered).
     #[cfg_attr(feature = "serde", serde(default))]

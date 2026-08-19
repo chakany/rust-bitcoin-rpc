@@ -11,7 +11,7 @@
 /// modelling.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct GetMempoolInfo {
+pub struct MempoolInfo {
     /// True if the initial load attempt of the persisted mempool finished.
     pub loaded: bool,
     /// Current tx count.
@@ -136,7 +136,7 @@ pub struct MempoolEntry {
 /// distinct shape from the plain array `getrawmempool` otherwise returns.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct GetRawMempoolSequence {
+pub struct RawMempoolSequence {
     /// The transaction ids currently in the mempool.
     pub txids: Vec<String>,
     /// The mempool sequence value.

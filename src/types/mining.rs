@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 /// Result of `getmininginfo`.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct GetMiningInfo {
+pub struct MiningInfo {
     /// The current block height.
     pub blocks: u64,
     /// The block weight (including reserved weight for block header, txs
@@ -62,7 +62,7 @@ pub struct GetMiningInfo {
     pub warnings: Vec<String>,
 }
 
-/// Information about the next block, held in [`GetMiningInfo::next`].
+/// Information about the next block, held in [`MiningInfo::next`].
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MiningInfoNext {

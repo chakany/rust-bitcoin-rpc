@@ -16,17 +16,17 @@ use crate::Result;
 use crate::params::positional;
 use crate::types::{
     Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest, BlockWithTxs,
-    ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput, DeploymentInfo,
-    EstimateSmartFee, GetBlockchainInfo, GetMempoolInfo, GetMiningInfo, GetNetTotals,
-    GetNetworkInfo, GetRawMempoolSequence, GetRpcInfo, IndexInfo, MempoolEntry, PeerInfo,
-    TestMempoolAcceptResult, Transaction, TxOut, ValidateAddress,
+    BlockchainInfo, ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput,
+    DeploymentInfo, FeeEstimate, IndexInfo, MempoolEntry, MempoolInfo, MiningInfo, NetTotals,
+    NetworkInfo, PeerInfo, RawMempoolSequence, RpcInfo, TestMempoolAcceptResult, Transaction,
+    TxOut, ValidateAddress,
 };
 
 /// Blockchain RPCs.
 pub trait BlockchainRpc: RpcCallAsync {
     /// Returns an object containing various state info regarding blockchain
     /// processing.
-    fn get_blockchain_info(&self) -> impl Future<Output = Result<GetBlockchainInfo>> + Send + '_ {
+    fn get_blockchain_info(&self) -> impl Future<Output = Result<BlockchainInfo>> + Send + '_ {
         self.call("getblockchaininfo", positional(vec![]))
     }
 
@@ -166,7 +166,7 @@ impl<T: RpcCallAsync + ?Sized> BlockchainRpc for T {}
 /// Mempool RPCs.
 pub trait MempoolRpc: RpcCallAsync {
     /// Returns details on the active state of the TX memory pool.
-    fn get_mempool_info(&self) -> impl Future<Output = Result<GetMempoolInfo>> + Send + '_ {
+    fn get_mempool_info(&self) -> impl Future<Output = Result<MempoolInfo>> + Send + '_ {
         self.call("getmempoolinfo", positional(vec![]))
     }
 
@@ -188,7 +188,7 @@ pub trait MempoolRpc: RpcCallAsync {
     /// sequence number, as of the moment the list was generated.
     fn get_raw_mempool_with_sequence(
         &self,
-    ) -> impl Future<Output = Result<GetRawMempoolSequence>> + Send + '_ {
+    ) -> impl Future<Output = Result<RawMempoolSequence>> + Send + '_ {
         self.call("getrawmempool", positional(vec![json!(false), json!(true)]))
     }
 
@@ -207,7 +207,7 @@ impl<T: RpcCallAsync + ?Sized> MempoolRpc for T {}
 pub trait NetworkRpc: RpcCallAsync {
     /// Returns an object containing various state info regarding P2P
     /// networking.
-    fn get_network_info(&self) -> impl Future<Output = Result<GetNetworkInfo>> + Send + '_ {
+    fn get_network_info(&self) -> impl Future<Output = Result<NetworkInfo>> + Send + '_ {
         self.call("getnetworkinfo", positional(vec![]))
     }
 
@@ -224,7 +224,7 @@ pub trait NetworkRpc: RpcCallAsync {
 
     /// Returns information about network traffic, including bytes in, bytes
     /// out, and current system time.
-    fn get_net_totals(&self) -> impl Future<Output = Result<GetNetTotals>> + Send + '_ {
+    fn get_net_totals(&self) -> impl Future<Output = Result<NetTotals>> + Send + '_ {
         self.call("getnettotals", positional(vec![]))
     }
 
@@ -265,7 +265,7 @@ impl<T: RpcCallAsync + ?Sized> NetworkRpc for T {}
 /// Mining RPCs.
 pub trait MiningRpc: RpcCallAsync {
     /// Returns a json object containing mining-related information.
-    fn get_mining_info(&self) -> impl Future<Output = Result<GetMiningInfo>> + Send + '_ {
+    fn get_mining_info(&self) -> impl Future<Output = Result<MiningInfo>> + Send + '_ {
         self.call("getmininginfo", positional(vec![]))
     }
 
@@ -467,7 +467,7 @@ pub trait FeeRpc: RpcCallAsync {
         &self,
         conf_target: u32,
         estimate_mode: Option<&str>,
-    ) -> impl Future<Output = Result<EstimateSmartFee>> + Send + '_ {
+    ) -> impl Future<Output = Result<FeeEstimate>> + Send + '_ {
         self.call(
             "estimatesmartfee",
             positional(vec![json!(conf_target), json!(estimate_mode)]),
@@ -500,7 +500,7 @@ pub trait ControlRpc: RpcCallAsync {
     }
 
     /// Returns details of the RPC server.
-    fn get_rpc_info(&self) -> impl Future<Output = Result<GetRpcInfo>> + Send + '_ {
+    fn get_rpc_info(&self) -> impl Future<Output = Result<RpcInfo>> + Send + '_ {
         self.call("getrpcinfo", positional(vec![]))
     }
 }

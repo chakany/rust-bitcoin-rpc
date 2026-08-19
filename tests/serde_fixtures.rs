@@ -17,7 +17,7 @@ fn get_blockchain_info_full() {
         "prune_target_size": 550000000_u64, "signet_challenge": "51",
         "warnings": ["unknown new rules activated"]
     });
-    let info: GetBlockchainInfo = serde_json::from_value(v).unwrap();
+    let info: BlockchainInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.chain, "main");
     assert_eq!(info.best_block_hash, "0000000000000000000");
     assert_eq!(info.median_time, 1689999000);
@@ -43,7 +43,7 @@ fn get_blockchain_info_minimal_and_forward_compatible() {
         "size_on_disk": 293, "pruned": false, "warnings": [],
         "some_field_from_a_future_release": 1
     });
-    let info: GetBlockchainInfo = serde_json::from_value(v).unwrap();
+    let info: BlockchainInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.chain, "regtest");
     assert_eq!(info.prune_height, None);
     assert_eq!(info.automatic_pruning, None);
@@ -66,7 +66,7 @@ fn get_blockchain_info_warnings_legacy_string_form() {
         "size_on_disk": 570000000000_u64, "pruned": false,
         "warnings": "single legacy warning"
     });
-    let info: GetBlockchainInfo = serde_json::from_value(v).unwrap();
+    let info: BlockchainInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.warnings, vec!["single legacy warning"]);
 
     // The other half of ruling R25: whichever wire form came in, the public
@@ -92,7 +92,7 @@ fn get_blockchain_info_warnings_legacy_empty_string_is_no_warnings() {
         "size_on_disk": 570000000000_u64, "pruned": false,
         "warnings": ""
     });
-    let info: GetBlockchainInfo = serde_json::from_value(v).unwrap();
+    let info: BlockchainInfo = serde_json::from_value(v).unwrap();
     assert!(info.warnings.is_empty(), "got {:?}", info.warnings);
 }
 
@@ -493,7 +493,7 @@ fn get_mempool_info_full() {
         "limitclustercount": 500, "limitclustersize": 101000,
         "optimal": true
     });
-    let info: GetMempoolInfo = serde_json::from_value(v).unwrap();
+    let info: MempoolInfo = serde_json::from_value(v).unwrap();
     assert!(info.loaded);
     assert_eq!(info.size, 120);
     assert_eq!(info.bytes, 45000);
@@ -517,7 +517,7 @@ fn get_mempool_info_forward_compatible() {
     // Every field is required in `getmempoolinfo`'s RPCResult, so this test's
     // forward-compatibility burden falls entirely on the unknown field, plus
     // proving the deprecated `fullrbf` field (present on a real node) is
-    // tolerated even though `GetMempoolInfo` has no field for it.
+    // tolerated even though `MempoolInfo` has no field for it.
     let v = json!({
         "loaded": false, "size": 0, "bytes": 0, "usage": 0,
         "total_fee": 0.0, "maxmempool": 300000000_u64,
@@ -529,7 +529,7 @@ fn get_mempool_info_forward_compatible() {
         "fullrbf": true,
         "some_field_from_a_future_release": 1
     });
-    let info: GetMempoolInfo = serde_json::from_value(v).unwrap();
+    let info: MempoolInfo = serde_json::from_value(v).unwrap();
     assert!(!info.loaded);
     assert_eq!(info.size, 0);
     assert!(!info.optimal);
@@ -612,7 +612,7 @@ fn get_raw_mempool_sequence_full() {
         "txids": ["2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"],
         "mempool_sequence": 12345_u64
     });
-    let seq: GetRawMempoolSequence = serde_json::from_value(v).unwrap();
+    let seq: RawMempoolSequence = serde_json::from_value(v).unwrap();
     assert_eq!(seq.txids.len(), 1);
     assert_eq!(
         seq.txids[0],
@@ -628,7 +628,7 @@ fn get_raw_mempool_sequence_forward_compatible() {
         "mempool_sequence": 0,
         "some_field_from_a_future_release": 1
     });
-    let seq: GetRawMempoolSequence = serde_json::from_value(v).unwrap();
+    let seq: RawMempoolSequence = serde_json::from_value(v).unwrap();
     assert!(seq.txids.is_empty());
     assert_eq!(seq.mempool_sequence, 0);
 }
@@ -651,7 +651,7 @@ fn get_network_info_full() {
         ],
         "warnings": ["This is a pre-release test build"]
     });
-    let info: GetNetworkInfo = serde_json::from_value(v).unwrap();
+    let info: NetworkInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.version, 250000);
     assert_eq!(info.protocol_version, 70016);
     assert_eq!(info.local_services_names, vec!["NETWORK", "WITNESS"]);
@@ -692,7 +692,7 @@ fn get_network_info_minimal_and_forward_compatible() {
         "localaddresses": [],
         "some_field_from_a_future_release": 1
     });
-    let info: GetNetworkInfo = serde_json::from_value(v).unwrap();
+    let info: NetworkInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.time_offset, -3);
     assert!(info.local_addresses.is_empty());
     // `warnings` has no ARR in this fixture at all; `serde(default)` covers it.
@@ -714,7 +714,7 @@ fn get_network_info_warnings_legacy_string_form() {
         "localaddresses": [],
         "warnings": "single legacy warning"
     });
-    let info: GetNetworkInfo = serde_json::from_value(v).unwrap();
+    let info: NetworkInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.warnings, vec!["single legacy warning"]);
 }
 
@@ -829,7 +829,7 @@ fn get_net_totals_full() {
             "bytes_left_in_cycle": 3000000000_u64, "time_left_in_cycle": 43200
         }
     });
-    let totals: GetNetTotals = serde_json::from_value(v).unwrap();
+    let totals: NetTotals = serde_json::from_value(v).unwrap();
     assert_eq!(totals.total_bytes_recv, 1000000);
     assert_eq!(totals.total_bytes_sent, 2000000);
     assert_eq!(totals.time_millis, 1690000000000);
@@ -857,7 +857,7 @@ fn get_mining_info_full() {
         },
         "warnings": ["This is a pre-release test build"]
     });
-    let info: GetMiningInfo = serde_json::from_value(v).unwrap();
+    let info: MiningInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.blocks, 800000);
     assert_eq!(info.current_block_weight, Some(4000000));
     assert_eq!(info.current_block_tx, Some(2500));
@@ -892,7 +892,7 @@ fn get_mining_info_minimal_and_forward_compatible() {
         "warnings": [],
         "some_field_from_a_future_release": 1
     });
-    let info: GetMiningInfo = serde_json::from_value(v).unwrap();
+    let info: MiningInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.current_block_weight, None);
     assert_eq!(info.current_block_tx, None);
     assert_eq!(info.signet_challenge, None);
@@ -913,7 +913,7 @@ fn get_mining_info_warnings_legacy_string_form() {
         },
         "warnings": "single legacy warning"
     });
-    let info: GetMiningInfo = serde_json::from_value(v).unwrap();
+    let info: MiningInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.warnings, vec!["single legacy warning"]);
 }
 
@@ -1035,7 +1035,7 @@ fn get_net_totals_forward_compatible() {
         },
         "some_field_from_a_future_release": 1
     });
-    let totals: GetNetTotals = serde_json::from_value(v).unwrap();
+    let totals: NetTotals = serde_json::from_value(v).unwrap();
     assert_eq!(totals.total_bytes_recv, 0);
     assert_eq!(totals.upload_target.target, 0);
     assert!(!totals.upload_target.target_reached);
@@ -1294,7 +1294,7 @@ fn estimate_smart_fee_full() {
         "errors": ["some warning"],
         "blocks": 6
     });
-    let est: EstimateSmartFee = serde_json::from_value(v).unwrap();
+    let est: FeeEstimate = serde_json::from_value(v).unwrap();
     assert_eq!(est.feerate, Some(0.00001200));
     assert_eq!(est.errors, Some(vec!["some warning".to_string()]));
     assert_eq!(est.blocks, 6);
@@ -1309,7 +1309,7 @@ fn estimate_smart_fee_errors_only() {
         "blocks": 1008,
         "some_field_from_a_future_release": 1
     });
-    let est: EstimateSmartFee = serde_json::from_value(v).unwrap();
+    let est: FeeEstimate = serde_json::from_value(v).unwrap();
     assert_eq!(est.feerate, None);
     assert_eq!(
         est.errors,
@@ -1330,7 +1330,7 @@ fn get_rpc_info_full() {
         ],
         "logpath": "/home/user/.bitcoin/debug.log"
     });
-    let info: GetRpcInfo = serde_json::from_value(v).unwrap();
+    let info: RpcInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.active_commands.len(), 1);
     assert_eq!(info.active_commands[0].method, "getblockchaininfo");
     assert_eq!(info.active_commands[0].duration, 1234);
@@ -1344,7 +1344,7 @@ fn get_rpc_info_minimal_and_forward_compatible() {
         "logpath": "/home/user/.bitcoin/debug.log",
         "some_field_from_a_future_release": 1
     });
-    let info: GetRpcInfo = serde_json::from_value(v).unwrap();
+    let info: RpcInfo = serde_json::from_value(v).unwrap();
     assert!(info.active_commands.is_empty());
     assert_eq!(info.logpath, "/home/user/.bitcoin/debug.log");
 }
