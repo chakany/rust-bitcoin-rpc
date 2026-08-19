@@ -12,7 +12,7 @@
 /// fills `error` and `error_locations` instead.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ValidateAddress {
+pub struct AddressValidation {
     /// If the address is valid or not.
     pub isvalid: bool,
     /// The bitcoin address validated.

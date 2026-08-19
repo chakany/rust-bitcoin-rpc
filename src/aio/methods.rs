@@ -15,11 +15,11 @@ use super::call::{RpcCallAsync, RpcCallAsyncExt};
 use crate::Result;
 use crate::params::positional;
 use crate::types::{
-    Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest, BlockWithTxs,
-    BlockchainInfo, ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput,
+    AddressValidation, Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest,
+    BlockWithTxs, BlockchainInfo, ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput,
     DeploymentInfo, FeeEstimate, IndexInfo, MempoolEntry, MempoolInfo, MiningInfo, NetTotals,
     NetworkInfo, PeerInfo, RawMempoolSequence, RpcInfo, TestMempoolAcceptResult, Transaction,
-    TxOut, ValidateAddress,
+    TxOut,
 };
 
 /// Blockchain RPCs.
@@ -513,7 +513,7 @@ pub trait UtilRpc: RpcCallAsync {
     fn validate_address(
         &self,
         address: &str,
-    ) -> impl Future<Output = Result<ValidateAddress>> + Send + '_ {
+    ) -> impl Future<Output = Result<AddressValidation>> + Send + '_ {
         self.call("validateaddress", positional(vec![json!(address)]))
     }
 

@@ -1366,7 +1366,7 @@ fn validate_address_full() {
         "error": "Invalid Bech32 checksum",
         "error_locations": [9, 10]
     });
-    let addr: ValidateAddress = serde_json::from_value(v).unwrap();
+    let addr: AddressValidation = serde_json::from_value(v).unwrap();
     assert!(addr.isvalid);
     assert_eq!(
         addr.address.as_deref(),
@@ -1391,7 +1391,7 @@ fn validate_address_invalid_returns_only_isvalid_and_error_fields() {
         "error_locations": [9, 10],
         "some_field_from_a_future_release": 1
     });
-    let addr: ValidateAddress = serde_json::from_value(v).unwrap();
+    let addr: AddressValidation = serde_json::from_value(v).unwrap();
     assert!(!addr.isvalid);
     assert_eq!(addr.address, None);
     assert_eq!(addr.script_pub_key, None);

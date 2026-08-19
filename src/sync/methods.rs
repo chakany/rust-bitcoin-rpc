@@ -11,11 +11,11 @@ use super::call::{RpcCall, RpcCallExt};
 use crate::Result;
 use crate::params::positional;
 use crate::types::{
-    Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest, BlockWithTxs,
-    BlockchainInfo, ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput,
+    AddressValidation, Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest,
+    BlockWithTxs, BlockchainInfo, ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput,
     DeploymentInfo, FeeEstimate, IndexInfo, MempoolEntry, MempoolInfo, MiningInfo, NetTotals,
     NetworkInfo, PeerInfo, RawMempoolSequence, RpcInfo, TestMempoolAcceptResult, Transaction,
-    TxOut, ValidateAddress,
+    TxOut,
 };
 
 /// Blockchain RPCs.
@@ -456,7 +456,7 @@ impl<T: RpcCall + ?Sized> ControlRpc for T {}
 /// Utility RPCs.
 pub trait UtilRpc: RpcCall {
     /// Returns information about the given bitcoin `address`.
-    fn validate_address(&self, address: &str) -> Result<ValidateAddress> {
+    fn validate_address(&self, address: &str) -> Result<AddressValidation> {
         self.call("validateaddress", positional(vec![json!(address)]))
     }
 
