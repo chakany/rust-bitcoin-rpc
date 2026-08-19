@@ -316,6 +316,11 @@ pub trait RawTransactionsRpc: RpcCall {
     /// `max_fee_rate` rejects the transaction if its fee rate is higher, in
     /// BTC/kvB; `0` accepts any fee rate. `max_burn_amount` rejects it if it has
     /// provably unspendable outputs worth more than that, in BTC.
+    ///
+    /// Core parses `max_fee_rate` and `max_burn_amount` from their literal
+    /// decimal text and accepts at most 8 decimal places; a value with more,
+    /// such as `0.1 + 0.2` producing `0.30000000000000004`, is rejected with
+    /// `RPC_TYPE_ERROR`. This crate does not round either value for you.
     fn send_raw_transaction(
         &self,
         hex: &str,
@@ -377,6 +382,11 @@ pub trait RawTransactionsRpc: RpcCall {
     /// More than one transaction is tested as a package, so parents must come
     /// before children. `max_fee_rate` rejects a transaction whose fee rate is
     /// higher, in BTC/kvB.
+    ///
+    /// Core parses `max_fee_rate` from its literal decimal text and accepts at
+    /// most 8 decimal places; a value with more, such as `0.1 + 0.2` producing
+    /// `0.30000000000000004`, is rejected with `RPC_TYPE_ERROR`. This crate
+    /// does not round it for you.
     fn test_mempool_accept(
         &self,
         raw_txs: &[String],

@@ -5,6 +5,10 @@
 //! a field does not break deserialization.
 
 /// Result of `getmempoolinfo`.
+///
+/// `fullrbf` is omitted: Core always sends it as `true` and documents it as
+/// deprecated (`mempool.cpp:1048,1075`), so it carries no information worth
+/// modelling.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GetMempoolInfo {
@@ -79,6 +83,10 @@ pub struct MempoolEntryFees {
 /// Mempool data for a single transaction, as returned by `getmempoolentry` and
 /// as the value type in the verbose form of `getrawmempool`,
 /// `getmempoolancestors` and `getmempooldescendants`.
+///
+/// `bip125-replaceable` is omitted: Core documents it as deprecated
+/// (`mempool.cpp:456`) in favor of full-RBF, where every transaction is
+/// implicitly replaceable.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MempoolEntry {

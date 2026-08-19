@@ -201,20 +201,26 @@ pub struct Block {
 ///
 /// Core documents these elements as an elision — "the transactions in the format
 /// of the `getrawtransaction` RPC" (`blockchain.cpp:818`) — plus a `fee`, so the
-/// transaction body is [`Transaction`], flattened in. The flatten is safe
-/// because `Transaction` declares no `fee` of its own.
+/// transaction body is [`Transaction`], flattened in. Both `fee` and every
+/// other field come from the same `TxToUniv` call (`core_io.cpp:430`), so
+/// `Transaction`'s own `fee` field flows through the flatten with everything
+/// else; this type needs no `fee` field of its own.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BlockTransaction {
     /// The transaction, in the same format `getrawtransaction` returns.
     #[cfg_attr(feature = "serde", serde(flatten))]
     pub tx: Transaction,
-    /// The transaction fee in BTC. Omitted if block undo data is not available.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub fee: Option<f64>,
 }
 
 /// Result of `getblock` at verbosity 2: the block with per-transaction detail.
+///
+/// This type also deserializes verbosity 3, which this crate does not expose
+/// a typed method for. Core's `blockToJSON` (`blockchain.cpp:214-224`) handles
+/// verbosity 2 and 3 identically except that verbosity 3 additionally fills in
+/// each input's `prevout`; since [`crate::types::TxIn::prevout`] is already
+/// modelled, calling `getblock` at verbosity 3 through the extension-trait
+/// mechanism and deserializing into `BlockWithTxs` works with no changes.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BlockWithTxs {

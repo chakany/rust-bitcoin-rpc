@@ -56,9 +56,13 @@ impl ClientBuilder {
     pub fn build(self) -> Result<Client> {
         self.config.validate()?;
         let authorization = self.config.auth.header_value()?;
+        // A JSON-RPC endpoint should never redirect; following one could
+        // silently re-send credentials to another host. `max_redirects(0)`
+        // disables redirect handling entirely (ureq's default is 10).
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(self.config.timeout)
             .http_status_as_error(false)
+            .max_redirects(0)
             .build()
             .into();
         Ok(Client {

@@ -17,11 +17,20 @@ Nothing is enabled by default; pick the client(s) you need.
 [`ureq`]: https://crates.io/crates/ureq
 [`reqwest`]: https://crates.io/crates/reqwest
 
+> [!NOTE]
+> With `aio` + `tls`, your lockfile will show `openssl-probe` (pulled in via
+> `reqwest` → `rustls-platform-verifier` → `rustls-native-certs`). Despite the
+> name, it is not a TLS backend: it's a small pure-Rust crate, published by the
+> `rustls` org, that only checks well-known filesystem paths for a CA bundle
+> (the same paths OpenSSL conventionally uses) so rustls can load one. It has
+> no build script and no `-sys` dependency, and never links against the
+> OpenSSL library. Its presence does not contradict the "no OpenSSL" claim
+> above.
+
 ## Quickstart: sync
 
 ```rust,no_run
-use bitcoin_rpc::sync::{BlockchainRpc, ClientBuilder};
-use bitcoin_rpc::Auth;
+use bitcoin_rpc::prelude::{sync::*, Auth};
 
 # fn main() -> bitcoin_rpc::Result<()> {
 let client = ClientBuilder::new("http://127.0.0.1:8332")
@@ -37,8 +46,7 @@ println!("{} blocks on {}", info.blocks, info.chain);
 ## Quickstart: async
 
 ```rust,no_run
-use bitcoin_rpc::aio::{BlockchainRpc, ClientBuilder};
-use bitcoin_rpc::Auth;
+use bitcoin_rpc::prelude::{aio::*, Auth};
 
 # #[tokio::main]
 # async fn main() -> bitcoin_rpc::Result<()> {
@@ -165,6 +173,11 @@ Every fallible call returns `bitcoin_rpc::Result<T>`, an alias for
 - `Json` — the reply body was not the JSON expected at the JSON-RPC layer.
 - `Rpc` — the node executed the request and returned a JSON-RPC error. Its
   `code` is Core's raw `RPC_*` constant from `src/rpc/protocol.h`.
+
+`Error` is `#[non_exhaustive]`, so a future release can add variants without
+that being a breaking change. Downstream `match` expressions must include a
+wildcard arm (`_ => ...`) — matching all four variants today and nothing else
+will fail to compile.
 
 ## License
 

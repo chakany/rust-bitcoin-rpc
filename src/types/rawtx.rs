@@ -158,6 +158,13 @@ pub struct Transaction {
     /// The block time, in seconds since the epoch.
     #[cfg_attr(feature = "serde", serde(default, rename = "blocktime"))]
     pub block_time: Option<i64>,
+    /// The transaction fee in BTC. Only present at `getrawtransaction`
+    /// verbosity 2, and only when the block's undo data is available
+    /// (`bitcoin/src/core_io.cpp:520-524`). `getblock` verbosity 2 and 3
+    /// inherit this field through [`crate::types::BlockTransaction`]'s
+    /// `serde(flatten)`, since Core emits it from the same `TxToUniv` call.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub fee: Option<f64>,
 }
 
 /// One input of `createrawtransaction`.
@@ -189,6 +196,11 @@ pub enum CreateRawTransactionOutput {
         /// Destination address.
         address: String,
         /// Amount in BTC.
+        ///
+        /// Core parses this from its literal decimal text and accepts at
+        /// most 8 decimal places; a value with more, such as `0.1 + 0.2`
+        /// producing `0.30000000000000004`, is rejected with
+        /// `RPC_TYPE_ERROR`. This crate does not round it for you.
         amount: f64,
     },
     /// An `OP_RETURN` output carrying `hex`.

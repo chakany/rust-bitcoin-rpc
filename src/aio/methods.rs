@@ -283,8 +283,9 @@ pub trait MiningRpc: RpcCallAsync {
         &self,
         request: &BlockTemplateRequest,
     ) -> impl Future<Output = Result<BlockTemplate>> + Send + '_ {
-        // `?` is unusable in a non-async fn, so encode here and carry the
-        // Result into the block; the encoding error surfaces on first poll.
+        // This fn returns `impl Future<..>`, not a `Try` type, so `?` can't be
+        // used directly on it; encode here and carry the Result into the
+        // block, where the enclosing type is a real async block and `?` works.
         let params = serde_json::to_value(request).map(|v| positional(vec![v]));
         async move { self.call("getblocktemplate", params?).await }
     }
@@ -360,6 +361,11 @@ pub trait RawTransactionsRpc: RpcCallAsync {
     /// `max_fee_rate` rejects the transaction if its fee rate is higher, in
     /// BTC/kvB; `0` accepts any fee rate. `max_burn_amount` rejects it if it has
     /// provably unspendable outputs worth more than that, in BTC.
+    ///
+    /// Core parses `max_fee_rate` and `max_burn_amount` from their literal
+    /// decimal text and accepts at most 8 decimal places; a value with more,
+    /// such as `0.1 + 0.2` producing `0.30000000000000004`, is rejected with
+    /// `RPC_TYPE_ERROR`. This crate does not round either value for you.
     fn send_raw_transaction(
         &self,
         hex: &str,
@@ -392,8 +398,9 @@ pub trait RawTransactionsRpc: RpcCallAsync {
         replaceable: Option<bool>,
         version: Option<u32>,
     ) -> impl Future<Output = Result<String>> + Send + '_ {
-        // `?` is unusable in a non-async fn, so encode here and carry the
-        // Result into the block; the encoding error surfaces on first poll.
+        // This fn returns `impl Future<..>`, not a `Try` type, so `?` can't be
+        // used directly on it; encode here and carry the Result into the
+        // block, where the enclosing type is a real async block and `?` works.
         let params = serde_json::to_value(inputs).and_then(|inputs| {
             serde_json::to_value(outputs).map(|outputs| {
                 positional(vec![
@@ -429,6 +436,11 @@ pub trait RawTransactionsRpc: RpcCallAsync {
     /// More than one transaction is tested as a package, so parents must come
     /// before children. `max_fee_rate` rejects a transaction whose fee rate is
     /// higher, in BTC/kvB.
+    ///
+    /// Core parses `max_fee_rate` from its literal decimal text and accepts at
+    /// most 8 decimal places; a value with more, such as `0.1 + 0.2` producing
+    /// `0.30000000000000004`, is rejected with `RPC_TYPE_ERROR`. This crate
+    /// does not round it for you.
     fn test_mempool_accept(
         &self,
         raw_txs: &[String],

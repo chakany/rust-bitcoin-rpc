@@ -34,9 +34,10 @@ pub mod prelude {
     /// Blocking traits.
     #[cfg(feature = "sync")]
     pub mod sync {
+        pub use crate::params::positional;
         pub use crate::sync::{
-            BlockchainRpc, ControlRpc, FeeRpc, MempoolRpc, MiningRpc, NetworkRpc,
-            RawTransactionsRpc, RpcCall, RpcCallExt, UtilRpc,
+            BlockchainRpc, Client, ClientBuilder, ControlRpc, FeeRpc, MempoolRpc, MiningRpc,
+            NetworkRpc, RawTransactionsRpc, RpcCall, RpcCallExt, UtilRpc,
         };
     }
 
@@ -44,9 +45,10 @@ pub mod prelude {
     #[cfg(feature = "aio")]
     pub mod aio {
         pub use crate::aio::{
-            BlockchainRpc, ControlRpc, FeeRpc, MempoolRpc, MiningRpc, NetworkRpc,
-            RawTransactionsRpc, RpcCallAsync, RpcCallAsyncExt, UtilRpc,
+            BlockchainRpc, Client, ClientBuilder, ControlRpc, FeeRpc, MempoolRpc, MiningRpc,
+            NetworkRpc, RawTransactionsRpc, RpcCallAsync, RpcCallAsyncExt, UtilRpc,
         };
+        pub use crate::params::positional;
     }
 
     pub use crate::{Auth, Error, Result, RpcError};

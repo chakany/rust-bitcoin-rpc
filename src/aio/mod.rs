@@ -63,7 +63,9 @@ impl ClientBuilder {
     pub fn build(self) -> Result<Client> {
         self.config.validate()?;
         let authorization = self.config.auth.header_value()?;
-        let mut builder = reqwest::Client::builder();
+        // A JSON-RPC endpoint should never redirect; following one could
+        // silently re-send credentials to another host.
+        let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
         if let Some(timeout) = self.config.timeout {
             builder = builder.timeout(timeout);
         }

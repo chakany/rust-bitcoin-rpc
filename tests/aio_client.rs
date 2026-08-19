@@ -158,7 +158,7 @@ async fn get_block_with_txs_sends_verbosity_2_and_deserializes() {
     assert_eq!(block.coinbase_tx.sequence, 4294967295);
     assert_eq!(block.coinbase_tx.witness.as_deref(), Some("00"));
     assert_eq!(block.tx.len(), 1);
-    assert_eq!(block.tx[0].fee, Some(0.00012345));
+    assert_eq!(block.tx[0].tx.fee, Some(0.00012345));
     // Reached through the `serde(flatten)`-ed transaction body.
     assert_eq!(block.tx[0].tx.vsize, 204);
     assert_eq!(block.tx[0].tx.vout[0].script_pub_key.script_type, "pubkey");

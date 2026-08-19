@@ -238,9 +238,9 @@ fn block_with_txs_full() {
     assert_eq!(block.coinbase_tx.locktime, 0);
     assert_eq!(block.tx.len(), 1);
     // `fee` is a JSON number even though Core documents it as STR_AMOUNT.
-    assert_eq!(block.tx[0].fee, Some(0.00012345));
     // Reached *through* the flattened `tx`: proves `serde(flatten)` really
     // routes the sibling keys into `Transaction` instead of dropping them.
+    assert_eq!(block.tx[0].tx.fee, Some(0.00012345));
     assert_eq!(
         block.tx[0].tx.txid,
         "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"
@@ -279,7 +279,7 @@ fn block_with_txs_minimal_and_forward_compatible() {
     let block: BlockWithTxs = serde_json::from_value(v).unwrap();
     assert_eq!(block.tx.len(), 1);
     // Blocks whose undo data is unavailable (e.g. pruned) carry no per-tx fee.
-    assert_eq!(block.tx[0].fee, None);
+    assert_eq!(block.tx[0].tx.fee, None);
     assert_eq!(block.tx[0].tx.hash, "4a5e1e");
     assert_eq!(block.tx[0].tx.weight, 816);
     assert!(block.tx[0].tx.vin.is_empty());
@@ -1089,7 +1089,8 @@ fn transaction_verbose_full() {
         "blockhash": "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054",
         "confirmations": 12,
         "time": 1690000000,
-        "blocktime": 1690000000
+        "blocktime": 1690000000,
+        "fee": 0.00012345
     });
     let tx: Transaction = serde_json::from_value(v).unwrap();
     assert_eq!(tx.in_active_chain, Some(true));
@@ -1098,6 +1099,8 @@ fn transaction_verbose_full() {
     assert_eq!(tx.confirmations, Some(12));
     assert_eq!(tx.block_time, Some(1690000000));
     assert_eq!(tx.hex.as_deref(), Some("0200000001abcdef"));
+    // Only present at verbosity 2, and only with undo data available.
+    assert_eq!(tx.fee, Some(0.00012345));
 
     assert_eq!(tx.vin.len(), 1);
     let vin = &tx.vin[0];
@@ -1164,6 +1167,7 @@ fn transaction_minimal_and_forward_compatible() {
     assert_eq!(tx.confirmations, None);
     assert_eq!(tx.time, None);
     assert_eq!(tx.block_time, None);
+    assert_eq!(tx.fee, None);
     assert_eq!(tx.vin[0].coinbase.as_deref(), Some("04ffff001d0102"));
     assert_eq!(tx.vin[0].txid, None);
     assert_eq!(tx.vin[0].vout, None);
