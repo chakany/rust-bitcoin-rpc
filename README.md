@@ -142,19 +142,29 @@ for the sync side by
 
 ## Scope
 
-44 typed methods across eight traits: `BlockchainRpc` (15), `NetworkRpc` (6),
-`RawTransactionsRpc` (6), `MempoolRpc` (5), `MiningRpc` (5), `ControlRpc` (4),
-`UtilRpc` (2), `FeeRpc` (1) — over 38 distinct RPC commands. The surplus of 6
-comes from four commands whose result shape depends on a verbosity or mode
-argument, so each is split into a separate typed method: `getblock` (x3:
+54 typed methods across eight traits: `BlockchainRpc` (15),
+`RawTransactionsRpc` (15), `NetworkRpc` (6), `MempoolRpc` (5), `MiningRpc` (5),
+`ControlRpc` (4), `UtilRpc` (3), `FeeRpc` (1) — over 48 distinct RPC commands.
+The surplus of 6 comes from four commands whose result shape depends on a
+verbosity or mode argument, so each is split into a separate typed method: `getblock` (x3:
 `get_block_hex`, `get_block`, `get_block_with_txs`), `getrawmempool` (x3:
 `get_raw_mempool`, `get_raw_mempool_verbose`, `get_raw_mempool_with_sequence`),
 `getblockheader` (x2: `get_block_header`, `get_block_header_hex`), and
 `getrawtransaction` (x2: `get_raw_transaction`, `get_raw_transaction_hex`).
 
+`RawTransactionsRpc` covers the whole wallet-free PSBT family: `createpsbt`,
+`decodepsbt`, `analyzepsbt`, `finalizepsbt`, `descriptorprocesspsbt`,
+`combinepsbt`, `joinpsbts`, `converttopsbt` and `utxoupdatepsbt`, with
+`deriveaddresses` on `UtilRpc`. `decodepsbt`'s result is modelled in full,
+including the Taproot fields and the BIP 373 MuSig2 fields added in v31.
+
 Not covered, deliberately:
 
 - No wallet RPCs (everything under Bitcoin Core's `wallet` category).
+- Three non-wallet `rawtransactions` RPCs: `decodescript`,
+  `combinerawtransaction`, and `signrawtransactionwithkey` — the last takes
+  raw private keys as an argument, which this crate deliberately has no API
+  for.
 - No hidden or regtest-only RPCs (e.g. `generatetoaddress`, `invalidateblock`).
 - No request batching — one JSON-RPC request per call.
 - Deprecated arguments are omitted from method signatures, with one
@@ -166,8 +176,11 @@ Not covered, deliberately:
 Use the extension-trait pattern above for anything on the "not covered" list.
 
 This crate has been verified against the Bitcoin Core v31.1 source and
-against a mock HTTP server (see `tests/`), but has not yet been exercised
-against a live node's happy path.
+against a mock HTTP server (see `tests/`). The PSBT result types are
+additionally checked against payloads captured from a live bitcoind v31.1 on
+regtest (`tests/data/`): each one is deserialized and re-serialized, so a
+field this crate failed to model would show up as missing. The remaining
+methods have not yet been exercised against a live node's happy path.
 
 ## Errors
 

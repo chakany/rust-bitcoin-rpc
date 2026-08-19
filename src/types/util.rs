@@ -1,6 +1,7 @@
 //! Request and response types for the utility RPCs.
 //!
 //! Transcribed from the `RPCResult` blocks of `validateaddress`
+//! (`src/rpc/output_script.cpp`), `deriveaddresses`
 //! (`src/rpc/output_script.cpp`) and `getindexinfo` (`src/rpc/node.cpp`) in
 //! Bitcoin Core v31.1. No response struct rejects unknown fields, so a newer
 //! node adding a field does not break deserialization.
@@ -55,4 +56,73 @@ pub struct IndexInfo {
     /// `pindex->nHeight` or left at its `0` default (`index/base.cpp:478,481`),
     /// never negative.
     pub best_block_height: u64,
+}
+
+/// How far to expand a ranged descriptor.
+///
+/// Core's `RANGE` argument type: a bare end index, or an explicit
+/// `[begin, end]` span. Only ever sent, so it has no `Deserialize`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DescriptorRange {
+    /// Expand indices `0..=end`.
+    End(u32),
+    /// Expand indices `begin..=end`.
+    Span {
+        /// First index to expand, inclusive.
+        begin: u32,
+        /// Last index to expand, inclusive.
+        end: u32,
+    },
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for DescriptorRange {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match *self {
+            DescriptorRange::End(end) => serializer.serialize_u32(end),
+            DescriptorRange::Span { begin, end } => {
+                use serde::ser::SerializeTuple;
+                let mut tuple = serializer.serialize_tuple(2)?;
+                tuple.serialize_element(&begin)?;
+                tuple.serialize_element(&end)?;
+                tuple.end()
+            }
+        }
+    }
+}
+
+/// A descriptor argument, as `utxoupdatepsbt` and `descriptorprocesspsbt`
+/// accept it: either a bare descriptor string or one paired with a range.
+///
+/// Only ever sent, so it has no `Deserialize`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize), serde(untagged))]
+pub enum DescriptorRequest {
+    /// A descriptor with no range, letting the node use its default of 1000.
+    Plain(String),
+    /// A descriptor expanded over `range`.
+    Ranged {
+        /// The output descriptor.
+        desc: String,
+        /// How far to expand it.
+        range: DescriptorRange,
+    },
+}
+
+/// Result of `deriveaddresses`.
+///
+/// A multipath descriptor (BIP 389) yields one address list per multipath
+/// expansion, in multipath specifier order; every other descriptor yields a
+/// single flat list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(untagged)
+)]
+pub enum DerivedAddresses {
+    /// Addresses derived from a single-path descriptor.
+    Single(Vec<String>),
+    /// Addresses derived from each expansion of a multipath descriptor.
+    Multipath(Vec<Vec<String>>),
 }

@@ -1424,3 +1424,520 @@ fn index_info_map_minimal_and_forward_compatible() {
     let map: std::collections::BTreeMap<String, IndexInfo> = serde_json::from_value(v).unwrap();
     assert!(map.is_empty());
 }
+
+#[test]
+fn psbt_analysis_full() {
+    // Every field the `analyzepsbt` RPCResult can produce, including the four
+    // `missing` members, which no single live PSBT populates at once.
+    let v = json!({
+        "inputs": [{
+            "has_utxo": true,
+            "is_final": false,
+            "missing": {
+                "pubkeys": ["a9e59e4bf859870fee727e80083a784b6ae59f2f"],
+                "signatures": ["c51b66bced5e4491001bd702669770dccf440982"],
+                "redeemscript": "15cc49e191cbc520d91944600a5cb77af6aa3291",
+                "witnessscript": "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
+            },
+            "next": "signer"
+        }],
+        "estimated_vsize": 110,
+        "estimated_feerate": 90.9090909,
+        "fee": 10.0,
+        "next": "signer",
+        "error": "PSBT is not valid. Input 0 spends unspendable output"
+    });
+    let a: PsbtAnalysis = serde_json::from_value(v).unwrap();
+    let inputs = a.inputs.as_ref().unwrap();
+    assert_eq!(inputs.len(), 1);
+    assert!(inputs[0].has_utxo);
+    assert!(!inputs[0].is_final);
+    assert_eq!(inputs[0].next.as_deref(), Some("signer"));
+    let missing = inputs[0].missing.as_ref().unwrap();
+    assert_eq!(
+        missing.pubkeys.as_deref(),
+        Some(["a9e59e4bf859870fee727e80083a784b6ae59f2f".to_string()].as_slice())
+    );
+    assert_eq!(
+        missing.signatures.as_deref(),
+        Some(["c51b66bced5e4491001bd702669770dccf440982".to_string()].as_slice())
+    );
+    assert_eq!(
+        missing.redeem_script.as_deref(),
+        Some("15cc49e191cbc520d91944600a5cb77af6aa3291")
+    );
+    assert_eq!(
+        missing.witness_script.as_deref(),
+        Some("4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a")
+    );
+    assert_eq!(a.estimated_vsize, Some(110));
+    assert_eq!(a.estimated_feerate, Some(90.9090909));
+    assert_eq!(a.fee, Some(10.0));
+    assert_eq!(a.next, "signer");
+    assert!(a.error.is_some());
+}
+
+#[test]
+fn psbt_analysis_stages_from_a_live_node() {
+    // Captured from bitcoind v31.1 on regtest, walking one PSBT from creation
+    // to finalization. Each stage drops or adds fields, so all four shapes
+    // must deserialize.
+    let no_utxo: PsbtAnalysis = serde_json::from_value(json!({
+        "inputs": [{"has_utxo": false, "is_final": false, "next": "updater"}],
+        "next": "updater"
+    }))
+    .unwrap();
+    assert!(!no_utxo.inputs.as_ref().unwrap()[0].has_utxo);
+    // Before the UTXOs are known, Core cannot compute a fee or a size.
+    assert_eq!(no_utxo.fee, None);
+    assert_eq!(no_utxo.estimated_vsize, None);
+    assert_eq!(no_utxo.estimated_feerate, None);
+
+    let updated: PsbtAnalysis = serde_json::from_value(json!({
+        "inputs": [{
+            "has_utxo": true,
+            "is_final": false,
+            "next": "updater",
+            "missing": {"pubkeys": ["a9e59e4bf859870fee727e80083a784b6ae59f2f"]}
+        }],
+        "fee": 10.0,
+        "next": "updater"
+    }))
+    .unwrap();
+    assert_eq!(updated.fee, Some(10.0));
+    // Only `pubkeys` is missing; the other three members stay absent.
+    let missing = updated.inputs.as_ref().unwrap()[0]
+        .missing
+        .as_ref()
+        .unwrap();
+    assert!(missing.pubkeys.is_some());
+    assert_eq!(missing.signatures, None);
+    assert_eq!(missing.redeem_script, None);
+    assert_eq!(missing.witness_script, None);
+
+    let signed: PsbtAnalysis = serde_json::from_value(json!({
+        "inputs": [{"has_utxo": true, "is_final": false, "next": "finalizer"}],
+        "estimated_vsize": 110,
+        "estimated_feerate": 90.9090909,
+        "fee": 10.0,
+        "next": "finalizer"
+    }))
+    .unwrap();
+    assert_eq!(signed.next, "finalizer");
+    assert_eq!(signed.estimated_vsize, Some(110));
+    assert_eq!(signed.inputs.as_ref().unwrap()[0].missing, None);
+
+    let complete: PsbtAnalysis = serde_json::from_value(json!({
+        "inputs": [{"has_utxo": true, "is_final": true, "next": "extractor"}],
+        "estimated_vsize": 110,
+        "estimated_feerate": 90.9090909,
+        "fee": 10.0,
+        "next": "extractor"
+    }))
+    .unwrap();
+    assert!(complete.inputs.as_ref().unwrap()[0].is_final);
+    assert_eq!(complete.next, "extractor");
+}
+
+#[test]
+fn psbt_analysis_minimal_and_forward_compatible() {
+    // `next` is the only field Core always fills; an unparsable PSBT yields
+    // `error` with no `inputs` at all.
+    let v = json!({
+        "next": "creator",
+        "error": "TX decode failed",
+        "some_field_from_a_future_release": "x"
+    });
+    let a: PsbtAnalysis = serde_json::from_value(v).unwrap();
+    assert_eq!(a.next, "creator");
+    assert_eq!(a.error.as_deref(), Some("TX decode failed"));
+    assert_eq!(a.inputs, None);
+}
+
+#[test]
+fn psbt_finalization_and_process_result_shapes() {
+    let extracted: PsbtFinalization =
+        serde_json::from_value(json!({"hex": "0200000000010128", "complete": true})).unwrap();
+    assert_eq!(extracted.hex.as_deref(), Some("0200000000010128"));
+    assert_eq!(extracted.psbt, None);
+    assert!(extracted.complete);
+
+    let kept: PsbtFinalization =
+        serde_json::from_value(json!({"psbt": "cHNidP8BAFIC", "complete": false})).unwrap();
+    assert_eq!(kept.psbt.as_deref(), Some("cHNidP8BAFIC"));
+    assert_eq!(kept.hex, None);
+    assert!(!kept.complete);
+
+    // `hex` appears only once the PSBT is complete.
+    let signed: PsbtProcessResult = serde_json::from_value(
+        json!({"psbt": "cHNidP8BAFIC", "complete": true, "hex": "0200000000010128"}),
+    )
+    .unwrap();
+    assert_eq!(signed.hex.as_deref(), Some("0200000000010128"));
+
+    let watch_only: PsbtProcessResult =
+        serde_json::from_value(json!({"psbt": "cHNidP8BAFIC", "complete": false})).unwrap();
+    assert!(!watch_only.complete);
+    assert_eq!(watch_only.hex, None);
+}
+
+#[test]
+fn derived_addresses_picks_the_shape_from_the_payload() {
+    let flat: DerivedAddresses =
+        serde_json::from_value(json!(["bcrt1q6mrgxcz4953pk5g7xge8t5vnlwt4m8hypsqppq"])).unwrap();
+    assert_eq!(
+        flat,
+        DerivedAddresses::Single(vec![
+            "bcrt1q6mrgxcz4953pk5g7xge8t5vnlwt4m8hypsqppq".to_string()
+        ])
+    );
+
+    let nested: DerivedAddresses = serde_json::from_value(json!([
+        ["bcrt1qp5wfcq48h6d63wyy9qz0awtpfqwwv4sm4gc9mc"],
+        ["bcrt1q7zwtzcqsm3k43ha0ac7nl8cz0hqrhckyxxcw45"]
+    ]))
+    .unwrap();
+    assert_eq!(
+        nested,
+        DerivedAddresses::Multipath(vec![
+            vec!["bcrt1qp5wfcq48h6d63wyy9qz0awtpfqwwv4sm4gc9mc".to_string()],
+            vec!["bcrt1q7zwtzcqsm3k43ha0ac7nl8cz0hqrhckyxxcw45".to_string()],
+        ])
+    );
+
+    // An empty result is a single empty list, not an empty multipath list.
+    let empty: DerivedAddresses = serde_json::from_value(json!([])).unwrap();
+    assert_eq!(empty, DerivedAddresses::Single(vec![]));
+}
+
+#[test]
+fn psbt_decoded_full() {
+    // Every field `decodepsbt` can emit, including the ones no single live PSBT
+    // populates: all four preimage maps, a key-path signature, and output-level
+    // MuSig2 participants.
+    let v = json!({
+        "tx": {
+            "txid": "9e1a2d3f4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6",
+            "hash": "1f2e3d4c5b6a798807162534435261708f9e0d1c2b3a4958475664738291a0b1",
+            "version": 2,
+            "size": 226,
+            "vsize": 144,
+            "weight": 574,
+            "locktime": 0,
+            "vin": [],
+            "vout": []
+        },
+        "global_xpubs": [{
+            "xpub": "tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp",
+            "master_fingerprint": "b5da67b1",
+            "path": "m/84h/1h/0h"
+        }],
+        "psbt_version": 0,
+        "proprietary": [{"identifier": "aaaa", "subtype": 0, "key": "fc02aaaa", "value": "bb"}],
+        "unknown": {"0f": "aabb"},
+        "inputs": [{
+            "non_witness_utxo": {
+                "txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+                "hash": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+                "version": 1,
+                "size": 204,
+                "vsize": 204,
+                "weight": 816,
+                "locktime": 0,
+                "vin": [],
+                "vout": []
+            },
+            "witness_utxo": {
+                "amount": 0.5,
+                "scriptPubKey": {
+                    "asm": "0 abcdef01",
+                    "desc": "addr(bcrt1q6mrgxcz4953pk5g7xge8t5vnlwt4m8hypsqppq)#8rar0j5g",
+                    "hex": "0014abcdef01",
+                    "type": "witness_v0_keyhash",
+                    "address": "bcrt1q6mrgxcz4953pk5g7xge8t5vnlwt4m8hypsqppq"
+                }
+            },
+            "partial_signatures": {"02e5a2b3": "304402203c78"},
+            "sighash": "ALL",
+            "redeem_script": {"asm": "0 abcd", "hex": "0014abcd", "type": "witness_v0_keyhash"},
+            "witness_script": {"asm": "OP_1 02aa OP_1 OP_CHECKMULTISIG", "hex": "512102aa51ae", "type": "multisig"},
+            "bip32_derivs": [{
+                "pubkey": "029f9a0409dbd39eb724f5e1266c07eeeed3cec1e72907e0228e9db636c6b72847",
+                "master_fingerprint": "b5da67b1",
+                "path": "m/84h/1h/0h/0/0"
+            }],
+            "final_scriptSig": {"asm": "304402203c78", "hex": "47304402203c78"},
+            "final_scriptwitness": ["304402203c78", "029f9a04"],
+            "ripemd160_preimages": {"189f7c8b1a386ffe8eed91b3830c7a7bcd1e778c": "0011"},
+            "sha256_preimages": {"4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a": "0022"},
+            "hash160_preimages": {"15cc49e191cbc520d91944600a5cb77af6aa3291": "0033"},
+            "hash256_preimages": {"76a56aced915d2513dcd84c2c378b2e8aa5cd632b5b71ca2f2ac5b0e3a649bdb": "0044"},
+            "taproot_key_path_sig": "a1b2c3",
+            "taproot_script_path_sigs": [{
+                "pubkey": "736e572900fe1252589a2143c8f3c79f71a0412d2353af755e9701c782694a02",
+                "leaf_hash": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+                "sig": "d1d2d3"
+            }],
+            "taproot_scripts": [{
+                "script": "20736e572900fe1252589a2143c8f3c79f71a0412d2353af755e9701c782694a02ac",
+                "leaf_ver": 192,
+                "control_blocks": ["c0736e5729"]
+            }],
+            "taproot_bip32_derivs": [{
+                "pubkey": "736e572900fe1252589a2143c8f3c79f71a0412d2353af755e9701c782694a02",
+                "master_fingerprint": "b5da67b1",
+                "path": "m/86h/1h/0h/0/0",
+                "leaf_hashes": ["b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c"]
+            }],
+            "taproot_internal_key": "736e572900fe1252589a2143c8f3c79f71a0412d2353af755e9701c782694a02",
+            "taproot_merkle_root": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+            "musig2_participant_pubkeys": [{
+                "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+                "participant_pubkeys": ["02346b99593357107c9d3459e9deba8d3eaf44e6636c85c7f853eb90ba52e8cd00"]
+            }],
+            "musig2_pubnonces": [{
+                "participant_pubkey": "02346b99593357107c9d3459e9deba8d3eaf44e6636c85c7f853eb90ba52e8cd00",
+                "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+                "leaf_hash": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+                "pubnonce": "02d99e7c87"
+            }],
+            "musig2_partial_sigs": [{
+                "participant_pubkey": "02346b99593357107c9d3459e9deba8d3eaf44e6636c85c7f853eb90ba52e8cd00",
+                "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+                "partial_sig": "e1e2e3"
+            }],
+            "unknown": {"1f": "ccdd"},
+            "proprietary": [{"identifier": "bbbb", "subtype": 1, "key": "fc02bbbb", "value": "cc"}]
+        }],
+        "outputs": [{
+            "redeem_script": {"asm": "0 dcba", "hex": "0014dcba", "type": "witness_v0_keyhash"},
+            "witness_script": {"asm": "OP_1 03bb OP_1 OP_CHECKMULTISIG", "hex": "512103bb51ae", "type": "multisig"},
+            "bip32_derivs": [{
+                "pubkey": "03479e36670626632edd1c8610971508d53ca97d4b36550b47179e1a4d281ba60",
+                "master_fingerprint": "b5da67b1",
+                "path": "m/84h/1h/0h/0/4"
+            }],
+            "taproot_internal_key": "736e572900fe1252589a2143c8f3c79f71a0412d2353af755e9701c782694a02",
+            "taproot_tree": [{
+                "depth": 2,
+                "leaf_ver": 192,
+                "script": "20736e572900fe1252589a2143c8f3c79f71a0412d2353af755e9701c782694a02ac"
+            }],
+            "taproot_bip32_derivs": [{
+                "pubkey": "736e572900fe1252589a2143c8f3c79f71a0412d2353af755e9701c782694a02",
+                "master_fingerprint": "b5da67b1",
+                "path": "m/86h/1h/0h/1/0",
+                "leaf_hashes": []
+            }],
+            "musig2_participant_pubkeys": [{
+                "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+                "participant_pubkeys": ["02346b99593357107c9d3459e9deba8d3eaf44e6636c85c7f853eb90ba52e8cd00"]
+            }],
+            "unknown": {"2f": "eeff"},
+            "proprietary": [{"identifier": "cccc", "subtype": 2, "key": "fc02cccc", "value": "dd"}]
+        }],
+        "fee": 0.0001
+    });
+    let p: PsbtDecoded = serde_json::from_value(v).unwrap();
+
+    assert_eq!(p.psbt_version, 0);
+    assert_eq!(p.fee, Some(0.0001));
+    assert_eq!(p.tx.version, 2);
+    assert_eq!(p.global_xpubs.len(), 1);
+    assert_eq!(p.global_xpubs[0].master_fingerprint, "b5da67b1");
+    assert_eq!(p.global_xpubs[0].path, "m/84h/1h/0h");
+    assert_eq!(p.proprietary[0].subtype, 0);
+    assert_eq!(p.unknown.get("0f").map(String::as_str), Some("aabb"));
+
+    let i = &p.inputs[0];
+    assert_eq!(i.non_witness_utxo.as_ref().unwrap().version, 1);
+    let witness_utxo = i.witness_utxo.as_ref().unwrap();
+    assert_eq!(witness_utxo.amount, 0.5);
+    assert_eq!(
+        witness_utxo.script_pub_key.script_type,
+        "witness_v0_keyhash"
+    );
+    assert_eq!(
+        i.partial_signatures
+            .as_ref()
+            .unwrap()
+            .get("02e5a2b3")
+            .map(String::as_str),
+        Some("304402203c78")
+    );
+    assert_eq!(i.sighash.as_deref(), Some("ALL"));
+    assert_eq!(i.redeem_script.as_ref().unwrap().hex, "0014abcd");
+    assert_eq!(i.witness_script.as_ref().unwrap().script_type, "multisig");
+    assert_eq!(i.bip32_derivs.as_ref().unwrap()[0].path, "m/84h/1h/0h/0/0");
+    assert_eq!(i.final_script_sig.as_ref().unwrap().hex, "47304402203c78");
+    assert_eq!(i.final_scriptwitness.as_ref().unwrap().len(), 2);
+    // All four preimage maps are distinct fields, so each rename is exercised.
+    assert!(
+        i.ripemd160_preimages
+            .as_ref()
+            .unwrap()
+            .values()
+            .eq(["0011"])
+    );
+    assert!(i.sha256_preimages.as_ref().unwrap().values().eq(["0022"]));
+    assert!(i.hash160_preimages.as_ref().unwrap().values().eq(["0033"]));
+    assert!(i.hash256_preimages.as_ref().unwrap().values().eq(["0044"]));
+    assert_eq!(i.taproot_key_path_sig.as_deref(), Some("a1b2c3"));
+    assert_eq!(
+        i.taproot_script_path_sigs.as_ref().unwrap()[0].sig,
+        "d1d2d3"
+    );
+    let script = &i.taproot_scripts.as_ref().unwrap()[0];
+    assert_eq!(script.leaf_ver, 192);
+    assert_eq!(script.control_blocks, ["c0736e5729"]);
+    assert_eq!(
+        i.taproot_bip32_derivs.as_ref().unwrap()[0]
+            .leaf_hashes
+            .len(),
+        1
+    );
+    assert!(i.taproot_internal_key.is_some());
+    assert!(i.taproot_merkle_root.is_some());
+    assert_eq!(
+        i.musig2_participant_pubkeys.as_ref().unwrap()[0]
+            .participant_pubkeys
+            .len(),
+        1
+    );
+    assert_eq!(
+        i.musig2_pubnonces.as_ref().unwrap()[0].pubnonce,
+        "02d99e7c87"
+    );
+    // `leaf_hash` is omitted when signing for the internal key.
+    assert_eq!(i.musig2_partial_sigs.as_ref().unwrap()[0].leaf_hash, None);
+    assert_eq!(
+        i.musig2_partial_sigs.as_ref().unwrap()[0].partial_sig,
+        "e1e2e3"
+    );
+    assert_eq!(
+        i.unknown.as_ref().unwrap().get("1f").map(String::as_str),
+        Some("ccdd")
+    );
+    assert_eq!(i.proprietary.as_ref().unwrap()[0].identifier, "bbbb");
+
+    let o = &p.outputs[0];
+    assert_eq!(o.redeem_script.as_ref().unwrap().hex, "0014dcba");
+    assert_eq!(o.witness_script.as_ref().unwrap().script_type, "multisig");
+    assert_eq!(o.bip32_derivs.as_ref().unwrap()[0].path, "m/84h/1h/0h/0/4");
+    assert!(o.taproot_internal_key.is_some());
+    let leaf = &o.taproot_tree.as_ref().unwrap()[0];
+    assert_eq!(leaf.depth, 2);
+    assert_eq!(leaf.leaf_ver, 192);
+    assert_eq!(
+        o.taproot_bip32_derivs.as_ref().unwrap()[0]
+            .leaf_hashes
+            .len(),
+        0
+    );
+    assert_eq!(o.musig2_participant_pubkeys.as_ref().unwrap().len(), 1);
+    assert_eq!(
+        o.unknown.as_ref().unwrap().get("2f").map(String::as_str),
+        Some("eeff")
+    );
+    assert_eq!(o.proprietary.as_ref().unwrap()[0].subtype, 2);
+}
+
+#[test]
+fn psbt_decoded_minimal_and_forward_compatible() {
+    // A freshly created PSBT: every per-input and per-output field absent, no
+    // fee yet, and a field from a hypothetical future release.
+    let v = json!({
+        "tx": {
+            "txid": "9e1a2d3f4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6",
+            "hash": "9e1a2d3f4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6",
+            "version": 2,
+            "size": 82,
+            "vsize": 82,
+            "weight": 328,
+            "locktime": 0,
+            "vin": [],
+            "vout": []
+        },
+        "global_xpubs": [],
+        "psbt_version": 0,
+        "proprietary": [],
+        "unknown": {},
+        "inputs": [{}],
+        "outputs": [{}],
+        "some_field_from_a_future_release": "x"
+    });
+    let p: PsbtDecoded = serde_json::from_value(v).unwrap();
+    assert_eq!(p.fee, None);
+    assert!(p.global_xpubs.is_empty());
+    assert!(p.unknown.is_empty());
+    let i = &p.inputs[0];
+    assert_eq!(i.witness_utxo, None);
+    assert_eq!(i.non_witness_utxo, None);
+    assert_eq!(i.partial_signatures, None);
+    assert_eq!(i.taproot_scripts, None);
+    assert_eq!(i.musig2_pubnonces, None);
+    assert_eq!(p.outputs[0].taproot_tree, None);
+}
+
+#[test]
+fn psbt_decoded_live_segwit_payload() {
+    // Captured verbatim from `decodepsbt` on bitcoind v31.1.
+    let p: PsbtDecoded = serde_json::from_str(include_str!("data/psbt_segwit.json")).unwrap();
+    assert_eq!(p.psbt_version, 0);
+    assert_eq!(p.inputs.len(), 1);
+    assert_eq!(p.outputs.len(), 2);
+    // A global proprietary map with an empty identifier is valid.
+    assert_eq!(p.proprietary[0].identifier, "");
+    assert_eq!(p.proprietary[0].key, "fc0000");
+    assert!(p.inputs[0].non_witness_utxo.is_some());
+    assert!(p.inputs[0].proprietary.is_some());
+    assert!(p.fee.is_some());
+}
+
+#[test]
+fn psbt_decoded_live_combined_payload() {
+    // Two PSBTs merged by `combinepsbt`, so the inputs carry signatures.
+    let p: PsbtDecoded = serde_json::from_str(include_str!("data/psbt_combined.json")).unwrap();
+    let i = &p.inputs[0];
+    assert!(!i.partial_signatures.as_ref().unwrap().is_empty());
+    assert_eq!(i.sighash.as_deref(), Some("ALL"));
+    assert!(i.redeem_script.is_some());
+    assert!(i.bip32_derivs.is_some());
+    assert!(p.outputs[0].bip32_derivs.is_some());
+}
+
+#[test]
+fn psbt_decoded_live_finalized_payload() {
+    // After `finalizepsbt`, the per-input signature data is replaced by the
+    // final scriptSig / scriptwitness.
+    let p: PsbtDecoded = serde_json::from_str(include_str!("data/psbt_finalized.json")).unwrap();
+    assert!(p.inputs[0].final_script_sig.is_some());
+    assert_eq!(p.inputs[0].partial_signatures, None);
+    assert!(p.inputs.iter().any(|i| i.final_scriptwitness.is_some()));
+}
+
+#[test]
+fn psbt_decoded_live_taproot_tree_payload() {
+    let p: PsbtDecoded = serde_json::from_str(include_str!("data/psbt_taproot_tree.json")).unwrap();
+    assert!(p.inputs[0].taproot_internal_key.is_some());
+    assert!(p.inputs[0].taproot_bip32_derivs.is_some());
+    let tree = p.outputs[0].taproot_tree.as_ref().unwrap();
+    assert_eq!(tree[0].depth, 2);
+    assert_eq!(tree[0].leaf_ver, 192);
+    assert!(!tree[0].script.is_empty());
+}
+
+#[test]
+fn psbt_decoded_live_musig2_payload() {
+    // MuSig2 (BIP 373) fields, new in Core v31.
+    let p: PsbtDecoded = serde_json::from_str(include_str!("data/psbt_musig2.json")).unwrap();
+    let i = &p.inputs[0];
+    assert!(!i.musig2_participant_pubkeys.as_ref().unwrap().is_empty());
+    let nonce = &i.musig2_pubnonces.as_ref().unwrap()[0];
+    assert!(nonce.leaf_hash.is_some());
+    assert!(!nonce.pubnonce.is_empty());
+    assert!(!i.musig2_partial_sigs.as_ref().unwrap().is_empty());
+    assert_eq!(i.taproot_scripts.as_ref().unwrap()[0].leaf_ver, 192);
+    assert!(i.taproot_merkle_root.is_some());
+    assert!(i.witness_utxo.is_some());
+}

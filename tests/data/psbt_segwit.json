@@ -1,0 +1,150 @@
+{
+ "tx": {
+  "txid": "af2cac1e0e33d896d9d0751d66fcb2fa54b737c7a13199281fb57e4f497bb652",
+  "hash": "af2cac1e0e33d896d9d0751d66fcb2fa54b737c7a13199281fb57e4f497bb652",
+  "version": 2,
+  "size": 117,
+  "vsize": 117,
+  "weight": 468,
+  "locktime": 1257139,
+  "vin": [
+   {
+    "txid": "f61b1742ca13176464adb3cb66050c00787bb3a4eead37e985f2df1e37718126",
+    "vout": 0,
+    "scriptSig": {
+     "asm": "",
+     "hex": ""
+    },
+    "sequence": 4294967294
+   }
+  ],
+  "vout": [
+   {
+    "value": 0.99999699,
+    "n": 0,
+    "scriptPubKey": {
+     "asm": "OP_DUP OP_HASH160 d0c59903c5bac2868760e90fd521a4665aa76520 OP_EQUALVERIFY OP_CHECKSIG",
+     "desc": "addr(mzYqZHTdciW2DvC6HRQygvWNbab9U6KdQY)#6llhf07v",
+     "hex": "76a914d0c59903c5bac2868760e90fd521a4665aa7652088ac",
+     "address": "mzYqZHTdciW2DvC6HRQygvWNbab9U6KdQY",
+     "type": "pubkeyhash"
+    }
+   },
+   {
+    "value": 1.0,
+    "n": 1,
+    "scriptPubKey": {
+     "asm": "OP_HASH160 3545e6e33b832c47050f24d3eeb93c9c03948bc7 OP_EQUAL",
+     "desc": "addr(2Mx6uYKYGW5J6sV59e5NsdtCTsJYRxednbx)#r0jph5dd",
+     "hex": "a9143545e6e33b832c47050f24d3eeb93c9c03948bc787",
+     "address": "2Mx6uYKYGW5J6sV59e5NsdtCTsJYRxednbx",
+     "type": "scripthash"
+    }
+   }
+  ]
+ },
+ "global_xpubs": [],
+ "psbt_version": 0,
+ "proprietary": [
+  {
+   "identifier": "",
+   "subtype": 0,
+   "key": "fc0000",
+   "value": "aa"
+  },
+  {
+   "identifier": "aaaa",
+   "subtype": 0,
+   "key": "fc02aaaa00",
+   "value": "aa"
+  }
+ ],
+ "unknown": {},
+ "inputs": [
+  {
+   "non_witness_utxo": {
+    "txid": "f61b1742ca13176464adb3cb66050c00787bb3a4eead37e985f2df1e37718126",
+    "hash": "af0ae80e4b19f35ccd00c0b09341a225c8cf1116549729147212733e38216e5d",
+    "version": 1,
+    "size": 421,
+    "vsize": 259,
+    "weight": 1033,
+    "locktime": 0,
+    "vin": [
+     {
+      "txid": "e567952fb6cc33857f392efa3a46c995a28f69cca4bb1b37e0204dab1ec7a389",
+      "vout": 1,
+      "scriptSig": {
+       "asm": "0014be18d152a9b012039daf3da7de4f53349eecb985",
+       "hex": "160014be18d152a9b012039daf3da7de4f53349eecb985"
+      },
+      "txinwitness": [
+       "304402202712be22e0270f394f568311dc7ca9a68970b8025fdd3b240229f07f8a5f3a240220018b38d7dcd314e734c9276bd6fb40f673325bc4baa144c800d2f2f02db2765c01",
+       "03d2e15674941bad4a996372cb87e1856d3652606d98562fe39c5e9e7e413f2105"
+      ],
+      "sequence": 4294967295
+     },
+     {
+      "txid": "b490486aec3ae671012dddb2bb08466bef37720a533a894814ff1da743aaf886",
+      "vout": 1,
+      "scriptSig": {
+       "asm": "0014fe3e9ef1a745e974d902c4355943abcb34bd5353",
+       "hex": "160014fe3e9ef1a745e974d902c4355943abcb34bd5353"
+      },
+      "txinwitness": [
+       "3045022100d12b852d85dcd961d2f5f4ab660654df6eedcc794c0c33ce5cc309ffb5fce58d022067338a8e0e1725c197fb1a88af59f51e44e4255b20167c8684031c05d1f2592a01",
+       "0223b72beef0965d10be0778efecd61fcac6f79a4ea169393380734464f84f2ab3"
+      ],
+      "sequence": 4294967295
+     }
+    ],
+    "vout": [
+     {
+      "value": 2.0,
+      "n": 0,
+      "scriptPubKey": {
+       "asm": "OP_DUP OP_HASH160 85cff1097fd9e008bb34af709c62197b38978a48 OP_EQUALVERIFY OP_CHECKSIG",
+       "desc": "addr(msiVGbjmCNjLKN8ui2ZyuaYGThSPARYg4i)#4802u7k0",
+       "hex": "76a91485cff1097fd9e008bb34af709c62197b38978a4888ac",
+       "address": "msiVGbjmCNjLKN8ui2ZyuaYGThSPARYg4i",
+       "type": "pubkeyhash"
+      }
+     },
+     {
+      "value": 1903.03501938,
+      "n": 1,
+      "scriptPubKey": {
+       "asm": "OP_HASH160 339725ba21efd62ac753a9bcd067d6c7a6a39d05 OP_EQUAL",
+       "desc": "addr(2Mwx1WyFxTQFuugmePLpDMyfY1UervhL1Dn)#tms6e5gg",
+       "hex": "a914339725ba21efd62ac753a9bcd067d6c7a6a39d0587",
+       "address": "2Mwx1WyFxTQFuugmePLpDMyfY1UervhL1Dn",
+       "type": "scripthash"
+      }
+     }
+    ]
+   },
+   "proprietary": [
+    {
+     "identifier": "aaaa",
+     "subtype": 1,
+     "key": "fc02aaaa01",
+     "value": "ab"
+    }
+   ]
+  }
+ ],
+ "outputs": [
+  {},
+  {
+   "proprietary": [
+    {
+     "identifier": "aaaa",
+     "subtype": 2,
+     "key": "fc02aaaa02",
+     "value": "ac"
+    }
+   ]
+  }
+ ],
+ "fee": 3.01e-06
+}

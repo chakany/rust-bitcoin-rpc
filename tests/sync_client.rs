@@ -7,7 +7,8 @@ use bitcoin_rpc::sync::{
     RawTransactionsRpc, RpcCall, RpcCallExt, UtilRpc,
 };
 use bitcoin_rpc::types::{
-    BlockTemplateRequest, CreateRawTransactionInput, CreateRawTransactionOutput,
+    BlockTemplateRequest, CreateRawTransactionInput, CreateRawTransactionOutput, DerivedAddresses,
+    DescriptorRange, DescriptorRequest, SighashType,
 };
 use bitcoin_rpc::{Auth, Error};
 use common::fixtures::{
@@ -631,14 +632,14 @@ fn control_rpcs_send_expected_params_and_deserialize_string_results() {
 }
 
 #[test]
-fn all_44_typed_methods_send_the_expected_wire_form() {
+fn all_54_typed_methods_send_the_expected_wire_form() {
     // A method's whole behaviour can be a hardcoded literal argument (the
     // verbosity/verbose constants below); the 53 fixture tests only check
     // deserialization, so a swapped literal would ship silently without a
     // test like this one that pins every method's outgoing (method, params).
     // The result of every call is discarded: only the wire form matters here.
     let reply = || (200, r#"{"jsonrpc":"2.0","id":1,"result":null}"#.to_string());
-    let server = common::MockServer::spawn(std::iter::repeat_with(reply).take(44).collect());
+    let server = common::MockServer::spawn(std::iter::repeat_with(reply).take(54).collect());
     let client = ClientBuilder::new(server.url()).build().unwrap();
 
     let inputs = [CreateRawTransactionInput {
@@ -652,6 +653,14 @@ fn all_44_typed_methods_send_the_expected_wire_form() {
     }];
     let raw_txs = ["0200000001abcdef".to_string()];
     let request = BlockTemplateRequest::default();
+    let psbts = ["cHNidP8BAFIC".to_string(), "cHNidP8BAFID".to_string()];
+    let descriptors = [
+        DescriptorRequest::Plain("wpkh(02aa)#checksum".to_string()),
+        DescriptorRequest::Ranged {
+            desc: "wpkh(xpub/0/*)#checksum".to_string(),
+            range: DescriptorRange::Span { begin: 0, end: 100 },
+        },
+    ];
 
     let _ = client.get_blockchain_info();
     let _ = client.get_best_block_hash();
@@ -697,6 +706,22 @@ fn all_44_typed_methods_send_the_expected_wire_form() {
     let _ = client.get_rpc_info();
     let _ = client.validate_address("addr1");
     let _ = client.get_index_info(Some("txindex"));
+    let _ = client.create_psbt(&inputs, &outputs, Some(800000), Some(true), Some(2));
+    let _ = client.combine_psbt(&psbts);
+    let _ = client.join_psbts(&psbts);
+    let _ = client.convert_to_psbt("hex1", Some(true), Some(false));
+    let _ = client.utxo_update_psbt("cHNidP8BAFIC", Some(&descriptors));
+    let _ = client.finalize_psbt("cHNidP8BAFIC", Some(false));
+    let _ = client.descriptor_process_psbt(
+        "cHNidP8BAFIC",
+        &descriptors,
+        Some(SighashType::AllAnyoneCanPay),
+        Some(true),
+        Some(false),
+    );
+    let _ = client.derive_addresses("wpkh(02aa)#checksum", Some(DescriptorRange::End(5)));
+    let _ = client.analyze_psbt("cHNidP8BAFIC");
+    let _ = client.decode_psbt("cHNidP8BAFIC");
 
     let expected: &[(&str, serde_json::Value)] = &[
         ("getblockchaininfo", json!([])),
@@ -752,13 +777,187 @@ fn all_44_typed_methods_send_the_expected_wire_form() {
         ("getrpcinfo", json!([])),
         ("validateaddress", json!(["addr1"])),
         ("getindexinfo", json!(["txindex"])),
+        (
+            "createpsbt",
+            json!([
+                [{"txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b", "vout": 1}],
+                [{"bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4": 0.01}],
+                800000,
+                true,
+                2
+            ]),
+        ),
+        ("combinepsbt", json!([["cHNidP8BAFIC", "cHNidP8BAFID"]])),
+        ("joinpsbts", json!([["cHNidP8BAFIC", "cHNidP8BAFID"]])),
+        ("converttopsbt", json!(["hex1", true, false])),
+        (
+            "utxoupdatepsbt",
+            json!([
+                "cHNidP8BAFIC",
+                [
+                    "wpkh(02aa)#checksum",
+                    {"desc": "wpkh(xpub/0/*)#checksum", "range": [0, 100]}
+                ]
+            ]),
+        ),
+        ("finalizepsbt", json!(["cHNidP8BAFIC", false])),
+        (
+            "descriptorprocesspsbt",
+            json!([
+                "cHNidP8BAFIC",
+                [
+                    "wpkh(02aa)#checksum",
+                    {"desc": "wpkh(xpub/0/*)#checksum", "range": [0, 100]}
+                ],
+                "ALL|ANYONECANPAY",
+                true,
+                false
+            ]),
+        ),
+        ("deriveaddresses", json!(["wpkh(02aa)#checksum", 5])),
+        ("analyzepsbt", json!(["cHNidP8BAFIC"])),
+        ("decodepsbt", json!(["cHNidP8BAFIC"])),
     ];
 
     let requests = server.requests();
-    assert_eq!(requests.len(), expected.len(), "expected 44 requests");
+    assert_eq!(requests.len(), expected.len(), "expected 54 requests");
     for (i, (method, params)) in expected.iter().enumerate() {
         let sent: serde_json::Value = serde_json::from_str(&requests[i].body).unwrap();
         assert_eq!(sent["method"], *method, "request #{i}");
         assert_eq!(&sent["params"], params, "request #{i} ({method})");
     }
+}
+
+#[test]
+fn derive_addresses_deserializes_both_result_shapes() {
+    // A multipath descriptor (BIP 389) makes Core return one address array per
+    // expansion instead of a flat array, so the result type must model both.
+    let flat =
+        r#"{"jsonrpc":"2.0","id":1,"result":["bcrt1q6mrgxcz4953pk5g7xge8t5vnlwt4m8hypsqppq"]}"#;
+    let nested = r#"{"jsonrpc":"2.0","id":1,"result":[["bcrt1qp5wfcq48h6d63wyy9qz0awtpfqwwv4sm4gc9mc","bcrt1qrfxr69jqnhwufxgkqgcdep9prq4j4vuwzpxkrk"],["bcrt1q7zwtzcqsm3k43ha0ac7nl8cz0hqrhckyxxcw45","bcrt1qf7x2v0de6hvgv6tke54pyzmkc9022wh567tygw"]]}"#;
+    let server =
+        common::MockServer::spawn(vec![(200, flat.to_string()), (200, nested.to_string())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let single = client
+        .derive_addresses("wpkh(02aa)#checksum", None)
+        .unwrap();
+    assert_eq!(
+        single,
+        DerivedAddresses::Single(vec![
+            "bcrt1q6mrgxcz4953pk5g7xge8t5vnlwt4m8hypsqppq".to_string()
+        ])
+    );
+
+    let multi = client
+        .derive_addresses("wpkh(xpub/<0;1>/*)#checksum", Some(DescriptorRange::End(1)))
+        .unwrap();
+    assert_eq!(
+        multi,
+        DerivedAddresses::Multipath(vec![
+            vec![
+                "bcrt1qp5wfcq48h6d63wyy9qz0awtpfqwwv4sm4gc9mc".to_string(),
+                "bcrt1qrfxr69jqnhwufxgkqgcdep9prq4j4vuwzpxkrk".to_string(),
+            ],
+            vec![
+                "bcrt1q7zwtzcqsm3k43ha0ac7nl8cz0hqrhckyxxcw45".to_string(),
+                "bcrt1qf7x2v0de6hvgv6tke54pyzmkc9022wh567tygw".to_string(),
+            ],
+        ])
+    );
+
+    // A bare `range` end is sent as a number, not a one-element array.
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[1].body).unwrap();
+    assert_eq!(sent["params"], json!(["wpkh(xpub/<0;1>/*)#checksum", 1]));
+}
+
+#[test]
+fn finalize_psbt_returns_hex_when_extracted_and_psbt_otherwise() {
+    let extracted =
+        r#"{"jsonrpc":"2.0","id":1,"result":{"hex":"0200000000010128","complete":true}}"#;
+    let kept = r#"{"jsonrpc":"2.0","id":1,"result":{"psbt":"cHNidP8BAFIC","complete":true}}"#;
+    let server =
+        common::MockServer::spawn(vec![(200, extracted.to_string()), (200, kept.to_string())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let out = client.finalize_psbt("cHNidP8BAFIC", None).unwrap();
+    assert_eq!(out.hex.as_deref(), Some("0200000000010128"));
+    assert_eq!(out.psbt, None);
+    assert!(out.complete);
+
+    let out = client.finalize_psbt("cHNidP8BAFIC", Some(false)).unwrap();
+    assert_eq!(out.psbt.as_deref(), Some("cHNidP8BAFIC"));
+    assert_eq!(out.hex, None);
+
+    // `extract` omitted must not be sent as null: Core's default is true.
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(sent["params"], json!(["cHNidP8BAFIC"]));
+}
+
+#[test]
+fn utxo_update_psbt_omits_absent_descriptors_and_sends_both_descriptor_forms() {
+    let reply = || {
+        (
+            200,
+            r#"{"jsonrpc":"2.0","id":1,"result":"cHNidP8BAFIC"}"#.to_string(),
+        )
+    };
+    let server = common::MockServer::spawn(vec![reply(), reply()]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let _ = client.utxo_update_psbt("cHNidP8BAFIC", None).unwrap();
+    let descriptors = [
+        DescriptorRequest::Plain("wpkh(02aa)#checksum".to_string()),
+        DescriptorRequest::Ranged {
+            desc: "wpkh(xpub/0/*)#checksum".to_string(),
+            range: DescriptorRange::Span { begin: 0, end: 100 },
+        },
+    ];
+    let _ = client
+        .utxo_update_psbt("cHNidP8BAFIC", Some(&descriptors))
+        .unwrap();
+
+    let requests = server.requests();
+    let first: serde_json::Value = serde_json::from_str(&requests[0].body).unwrap();
+    assert_eq!(first["params"], json!(["cHNidP8BAFIC"]));
+    let second: serde_json::Value = serde_json::from_str(&requests[1].body).unwrap();
+    assert_eq!(
+        second["params"],
+        json!([
+            "cHNidP8BAFIC",
+            [
+                "wpkh(02aa)#checksum",
+                {"desc": "wpkh(xpub/0/*)#checksum", "range": [0, 100]}
+            ]
+        ])
+    );
+}
+
+#[test]
+fn descriptor_process_psbt_deserializes_the_incomplete_shape() {
+    // A watch-only descriptor cannot sign, so `complete` is false and `hex` is
+    // absent -- the shape a caller processing an offline PSBT actually sees.
+    let reply = r#"{"jsonrpc":"2.0","id":1,"result":{"psbt":"cHNidP8BAFIC","complete":false}}"#;
+    let server = common::MockServer::spawn(vec![(200, reply.to_string())]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let descriptors = [DescriptorRequest::Plain("wpkh(02aa)#checksum".to_string())];
+    let out = client
+        .descriptor_process_psbt(
+            "cHNidP8BAFIC",
+            &descriptors,
+            Some(SighashType::All),
+            Some(true),
+            Some(false),
+        )
+        .unwrap();
+    assert_eq!(out.psbt, "cHNidP8BAFIC");
+    assert!(!out.complete);
+    assert_eq!(out.hex, None);
+
+    let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
+    assert_eq!(
+        sent["params"],
+        json!(["cHNidP8BAFIC", ["wpkh(02aa)#checksum"], "ALL", true, false])
+    );
 }

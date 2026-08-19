@@ -1,0 +1,165 @@
+{
+ "tx": {
+  "txid": "6a92bee335aff18e29c5d8c1f299c7036b8decbd82e374bb3a0d3d5e3f2c9024",
+  "hash": "6a92bee335aff18e29c5d8c1f299c7036b8decbd82e374bb3a0d3d5e3f2c9024",
+  "version": 2,
+  "size": 82,
+  "vsize": 82,
+  "weight": 328,
+  "locktime": 0,
+  "vin": [
+   {
+    "txid": "3719a91ffbf09a7186fc8a0496d2ef70bc00fa1de17f0f9900966b79504a8b9a",
+    "vout": 1,
+    "scriptSig": {
+     "asm": "",
+     "hex": ""
+    },
+    "sequence": 4294967293
+   }
+  ],
+  "vout": [
+   {
+    "value": 0.99999,
+    "n": 0,
+    "scriptPubKey": {
+     "asm": "0 c9123e06e8d7f0966c5d1cd0f933002d4eb757cd",
+     "desc": "addr(bcrt1qeyfruphg6lcfvmzarng0jvcq948tw47duw2azt)#usgp97dr",
+     "hex": "0014c9123e06e8d7f0966c5d1cd0f933002d4eb757cd",
+     "address": "bcrt1qeyfruphg6lcfvmzarng0jvcq948tw47duw2azt",
+     "type": "witness_v0_keyhash"
+    }
+   }
+  ]
+ },
+ "global_xpubs": [],
+ "psbt_version": 0,
+ "proprietary": [],
+ "unknown": {},
+ "inputs": [
+  {
+   "witness_utxo": {
+    "amount": 1.0,
+    "scriptPubKey": {
+     "asm": "1 56bdb481b4d67103f6d5dea8a9aafd3684a6a79b4a2e247799db8d4b1a86e1f8",
+     "desc": "rawtr(56bdb481b4d67103f6d5dea8a9aafd3684a6a79b4a2e247799db8d4b1a86e1f8)#24775fmh",
+     "hex": "512056bdb481b4d67103f6d5dea8a9aafd3684a6a79b4a2e247799db8d4b1a86e1f8",
+     "address": "bcrt1p267mfqd56ecs8ak4m652n2hax6z2dfumfghzgauemwx5kx5xu8uqt3n9p6",
+     "type": "witness_v1_taproot"
+    }
+   },
+   "taproot_script_path_sigs": [
+    {
+     "pubkey": "0b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+     "leaf_hash": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+     "sig": "2667d52f6cc07fe06db31b1a5f7efe81903f9cbeef40fa64dafca01d2cb1d56403bc7504898e55872557d16d2ca79bc55fef10973841a33ec032d884758c9fe6"
+    }
+   ],
+   "taproot_scripts": [
+    {
+     "script": "200b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4ac",
+     "leaf_ver": 192,
+     "control_blocks": [
+      "c050929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0"
+     ]
+    }
+   ],
+   "taproot_bip32_derivs": [
+    {
+     "pubkey": "0b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+     "master_fingerprint": "2680dd6e",
+     "path": "m",
+     "leaf_hashes": [
+      "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c"
+     ]
+    },
+    {
+     "pubkey": "346b99593357107c9d3459e9deba8d3eaf44e6636c85c7f853eb90ba52e8cd00",
+     "master_fingerprint": "580b0887",
+     "path": "m",
+     "leaf_hashes": [
+      "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c"
+     ]
+    },
+    {
+     "pubkey": "4fafd65f8169186fc2bfdb2233c77e630d10be280a24c7165c09a27611775c2c",
+     "master_fingerprint": "c3249a82",
+     "path": "m",
+     "leaf_hashes": [
+      "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c"
+     ]
+    },
+    {
+     "pubkey": "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0",
+     "master_fingerprint": "7c461e5d",
+     "path": "m",
+     "leaf_hashes": []
+    },
+    {
+     "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+     "master_fingerprint": "7dd65592",
+     "path": "m",
+     "leaf_hashes": [
+      "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c"
+     ]
+    }
+   ],
+   "taproot_internal_key": "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0",
+   "taproot_merkle_root": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+   "musig2_participant_pubkeys": [
+    {
+     "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+     "participant_pubkeys": [
+      "02346b99593357107c9d3459e9deba8d3eaf44e6636c85c7f853eb90ba52e8cd00",
+      "024fafd65f8169186fc2bfdb2233c77e630d10be280a24c7165c09a27611775c2c",
+      "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"
+     ]
+    }
+   ],
+   "musig2_pubnonces": [
+    {
+     "participant_pubkey": "02346b99593357107c9d3459e9deba8d3eaf44e6636c85c7f853eb90ba52e8cd00",
+     "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+     "leaf_hash": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+     "pubnonce": "02d99e7c8719b3ad08566b0cb9c7d5eda3127c9e8119185b7d584d939b173915f50240df22aab78332cf0f25329d103dc0d2060a03742e9448026e736bcf3db98f3c"
+    },
+    {
+     "participant_pubkey": "024fafd65f8169186fc2bfdb2233c77e630d10be280a24c7165c09a27611775c2c",
+     "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+     "leaf_hash": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+     "pubnonce": "02e702a7075226a0d9313a77e6db10b8e742d4cffdc948a0edc9b856c13b412e5403386a0298f308fb3099155772e45b2aa8e770f435bedfe2041d1cc4d3d37538c6"
+    },
+    {
+     "participant_pubkey": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+     "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+     "leaf_hash": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+     "pubnonce": "02b1d912d45d753ceed0954417ba982656d2aec53f8638bd6f297dae3b743d71b0032f424537d599d28f14d59fe0a11b82fea2aa226a2980ffdacad5fdab20f80683"
+    }
+   ],
+   "musig2_partial_sigs": [
+    {
+     "participant_pubkey": "02346b99593357107c9d3459e9deba8d3eaf44e6636c85c7f853eb90ba52e8cd00",
+     "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+     "leaf_hash": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+     "partial_sig": "ada78b70af8cffa4c50863aef515ac58a327cd58c55bad29a162e67d9c413322"
+    },
+    {
+     "participant_pubkey": "024fafd65f8169186fc2bfdb2233c77e630d10be280a24c7165c09a27611775c2c",
+     "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+     "leaf_hash": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+     "partial_sig": "1fa8b7e6741c21eb8d9b0f65269df9e423369fc390ad2e918420c57feb2a1b61"
+    },
+    {
+     "participant_pubkey": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+     "aggregate_pubkey": "030b58e337aa4d3852a8c29387c42408d8cfbe3a613a5e397e0a9f01a5fb7107d4",
+     "leaf_hash": "b11fedaa63a0956501a7308c93b5637371e7613d9b8ade1783d49e26c06cfa2c",
+     "partial_sig": "366c31ad65e533f6d2b45e5910f3f587543f8061918167bf5a818b13be5792a4"
+    }
+   ]
+  }
+ ],
+ "outputs": [
+  {}
+ ],
+ "fee": 1e-05
+}

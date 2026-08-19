@@ -17,9 +17,10 @@ use crate::params::positional;
 use crate::types::{
     AddressValidation, Block, BlockHashAndHeight, BlockHeader, BlockTemplate, BlockTemplateRequest,
     BlockWithTxs, BlockchainInfo, ChainTip, CreateRawTransactionInput, CreateRawTransactionOutput,
-    DeploymentInfo, FeeEstimate, IndexInfo, MempoolEntry, MempoolInfo, MiningInfo, NetTotals,
-    NetworkInfo, PeerInfo, RawMempoolSequence, RpcInfo, TestMempoolAcceptResult, Transaction,
-    TxOut,
+    DeploymentInfo, DerivedAddresses, DescriptorRange, DescriptorRequest, FeeEstimate, IndexInfo,
+    MempoolEntry, MempoolInfo, MiningInfo, NetTotals, NetworkInfo, PeerInfo, PsbtAnalysis,
+    PsbtDecoded, PsbtFinalization, PsbtProcessResult, RawMempoolSequence, RpcInfo, SighashType,
+    TestMempoolAcceptResult, Transaction, TxOut,
 };
 
 /// Blockchain RPCs.
@@ -451,6 +452,158 @@ pub trait RawTransactionsRpc: RpcCallAsync {
             positional(vec![json!(raw_txs), json!(max_fee_rate)]),
         )
     }
+
+    /// Creates a PSBT spending `inputs` and creating `outputs`, and returns it
+    /// base64-encoded.
+    ///
+    /// Takes the same arguments, with the same defaults, as
+    /// [`create_raw_transaction`](Self::create_raw_transaction); the result is
+    /// the same transaction in PSBT form. It is neither signed, nor stored in a
+    /// wallet, nor transmitted to the network.
+    fn create_psbt(
+        &self,
+        inputs: &[CreateRawTransactionInput],
+        outputs: &[CreateRawTransactionOutput],
+        locktime: Option<u32>,
+        replaceable: Option<bool>,
+        version: Option<u32>,
+    ) -> impl Future<Output = Result<String>> + Send + '_ {
+        // See `create_raw_transaction` for why the params are encoded up front.
+        let params = serde_json::to_value(inputs).and_then(|inputs| {
+            serde_json::to_value(outputs).map(|outputs| {
+                positional(vec![
+                    inputs,
+                    outputs,
+                    json!(locktime),
+                    json!(replaceable),
+                    json!(version),
+                ])
+            })
+        });
+        async move { self.call("createpsbt", params?).await }
+    }
+
+    /// Decodes the base64-encoded `psbt` into its every field.
+    ///
+    /// Every per-input and per-output field is optional: a freshly created PSBT
+    /// carries none of them, and each role along the way fills in what it can.
+    /// [`analyze_psbt`](Self::analyze_psbt) answers "what does this PSBT still
+    /// need" without walking the whole structure.
+    fn decode_psbt(&self, psbt: &str) -> impl Future<Output = Result<PsbtDecoded>> + Send + '_ {
+        self.call("decodepsbt", positional(vec![json!(psbt)]))
+    }
+
+    /// Analyzes `psbt` and reports what each input still needs, plus the fee
+    /// and size the finished transaction is estimated to have.
+    ///
+    /// Reports the next role the PSBT must pass through rather than failing, so
+    /// a caller can drive an unsigned PSBT forward without inspecting it
+    /// field by field.
+    fn analyze_psbt(&self, psbt: &str) -> impl Future<Output = Result<PsbtAnalysis>> + Send + '_ {
+        self.call("analyzepsbt", positional(vec![json!(psbt)]))
+    }
+
+    /// Merges `psbts`, which must all be for the same transaction, into one.
+    ///
+    /// This is the Combiner role: it unions the signatures and metadata the
+    /// inputs carry. Core errors if the PSBTs describe different transactions.
+    fn combine_psbt(&self, psbts: &[String]) -> impl Future<Output = Result<String>> + Send + '_ {
+        self.call("combinepsbt", positional(vec![json!(psbts)]))
+    }
+
+    /// Joins `psbts`, which must be for *distinct* transactions, into one
+    /// transaction with all of their inputs and outputs.
+    ///
+    /// Unlike [`combine_psbt`](Self::combine_psbt), the inputs are not required
+    /// to match: Core errors if the same input appears in more than one of them.
+    /// No input or output ordering is guaranteed.
+    fn join_psbts(&self, psbts: &[String]) -> impl Future<Output = Result<String>> + Send + '_ {
+        self.call("joinpsbts", positional(vec![json!(psbts)]))
+    }
+
+    /// Converts the serialized, hex-encoded transaction `hex` into a PSBT.
+    ///
+    /// `permit_sig_data` allows the conversion to proceed by discarding any
+    /// scriptSigs and witnesses `hex` carries, and defaults to `false` on the
+    /// node — so by default a signed transaction is rejected rather than
+    /// silently stripped. Omitting `iswitness` lets the node decide
+    /// heuristically whether `hex` is a witness serialization.
+    fn convert_to_psbt(
+        &self,
+        hex: &str,
+        permit_sig_data: Option<bool>,
+        iswitness: Option<bool>,
+    ) -> impl Future<Output = Result<String>> + Send + '_ {
+        self.call(
+            "converttopsbt",
+            positional(vec![json!(hex), json!(permit_sig_data), json!(iswitness)]),
+        )
+    }
+
+    /// Fills in the UTXO of every segwit input of `psbt` from the UTXO set or
+    /// the mempool, and returns the updated PSBT.
+    ///
+    /// `descriptors` additionally supplies the redeem scripts, witness scripts
+    /// and BIP 32 derivation paths those inputs need. A ranged descriptor given
+    /// as [`DescriptorRequest::Plain`] is expanded to the node's default of
+    /// 1000 indices.
+    fn utxo_update_psbt(
+        &self,
+        psbt: &str,
+        descriptors: Option<&[DescriptorRequest]>,
+    ) -> impl Future<Output = Result<String>> + Send + '_ {
+        let params = serde_json::to_value(descriptors)
+            .map(|descriptors| positional(vec![json!(psbt), descriptors]));
+        async move { self.call("utxoupdatepsbt", params?).await }
+    }
+
+    /// Finalizes every input of `psbt` that has a complete set of signatures.
+    ///
+    /// `extract` defaults to `true` on the node, which returns the extracted
+    /// network transaction as
+    /// [`PsbtFinalization::hex`] — but only if *every* input finalized.
+    /// Otherwise, and whenever `extract` is `false`, the PSBT comes back as
+    /// [`PsbtFinalization::psbt`].
+    fn finalize_psbt(
+        &self,
+        psbt: &str,
+        extract: Option<bool>,
+    ) -> impl Future<Output = Result<PsbtFinalization>> + Send + '_ {
+        self.call(
+            "finalizepsbt",
+            positional(vec![json!(psbt), json!(extract)]),
+        )
+    }
+
+    /// Updates every segwit input of `psbt` from `descriptors`, the UTXO set
+    /// and the mempool, then signs whatever those descriptors can sign.
+    ///
+    /// Needs no wallet. A watch-only descriptor carries no private key, so it
+    /// updates but cannot sign, and the result's `complete` stays `false` —
+    /// which is the expected outcome, not an error. `sighash_type` applies only
+    /// to inputs the PSBT does not already pin one for. `bip32_derivs`
+    /// defaults to `true` on the node, `finalize` to `true`; finalizing an
+    /// input a watch-only descriptor could not sign fails, so pass
+    /// `Some(false)` when signing is expected to happen elsewhere.
+    fn descriptor_process_psbt(
+        &self,
+        psbt: &str,
+        descriptors: &[DescriptorRequest],
+        sighash_type: Option<SighashType>,
+        bip32_derivs: Option<bool>,
+        finalize: Option<bool>,
+    ) -> impl Future<Output = Result<PsbtProcessResult>> + Send + '_ {
+        let params = serde_json::to_value(descriptors).map(|descriptors| {
+            positional(vec![
+                json!(psbt),
+                descriptors,
+                json!(sighash_type),
+                json!(bip32_derivs),
+                json!(finalize),
+            ])
+        });
+        async move { self.call("descriptorprocesspsbt", params?).await }
+    }
 }
 
 impl<T: RpcCallAsync + ?Sized> RawTransactionsRpc for T {}
@@ -524,6 +677,22 @@ pub trait UtilRpc: RpcCallAsync {
         index_name: Option<&str>,
     ) -> impl Future<Output = Result<BTreeMap<String, IndexInfo>>> + Send + '_ {
         self.call("getindexinfo", positional(vec![json!(index_name)]))
+    }
+
+    /// Derives one or more addresses from the output `descriptor`.
+    ///
+    /// `range` is required for a ranged descriptor and rejected for any other.
+    /// A multipath descriptor (BIP 389) returns
+    /// [`DerivedAddresses::Multipath`], one address list per expansion.
+    fn derive_addresses(
+        &self,
+        descriptor: &str,
+        range: Option<DescriptorRange>,
+    ) -> impl Future<Output = Result<DerivedAddresses>> + Send + '_ {
+        self.call(
+            "deriveaddresses",
+            positional(vec![json!(descriptor), json!(range)]),
+        )
     }
 }
 

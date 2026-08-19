@@ -6,6 +6,7 @@ pub mod fees;
 pub mod mempool;
 pub mod mining;
 pub mod network;
+pub mod psbt;
 pub mod rawtx;
 pub mod util;
 
@@ -18,5 +19,6 @@ pub use fees::*;
 pub use mempool::*;
 pub use mining::*;
 pub use network::*;
+pub use psbt::*;
 pub use rawtx::*;
 pub use util::*;
