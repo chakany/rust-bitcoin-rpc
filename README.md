@@ -185,7 +185,7 @@ methods have not yet been exercised against a live node's happy path.
 ## Errors
 
 Every fallible call returns `bitcoin_rpc::Result<T>`, an alias for
-`Result<T, Error>`. `Error` has four variants:
+`Result<T, Error>`. `Error` has five variants:
 
 - `Config` — the client was misconfigured: a bad URL, or an unreadable or
   malformed cookie file.
@@ -198,10 +198,13 @@ Every fallible call returns `bitcoin_rpc::Result<T>`, an alias for
 - `Json` — the reply body was not the JSON expected at the JSON-RPC layer.
 - `Rpc` — the node executed the request and returned a JSON-RPC error. Its
   `code` is Core's raw `RPC_*` constant from `src/rpc/protocol.h`.
+- `ResponseTooLarge` — the reply body exceeded `ClientBuilder::max_response_size`
+  (64 MiB by default) and was abandoned rather than buffered. Raise the cap,
+  or pass `None` to lift it, for calls that legitimately return more.
 
 `Error` is `#[non_exhaustive]`, so a future release can add variants without
 that being a breaking change. Downstream `match` expressions must include a
-wildcard arm (`_ => ...`) — matching all four variants today and nothing else
+wildcard arm (`_ => ...`) — matching all five variants today and nothing else
 will fail to compile.
 
 ## License

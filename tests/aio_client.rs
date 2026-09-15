@@ -1062,3 +1062,61 @@ async fn request_ids_increase_across_calls_and_each_reply_is_matched_to_its_own(
         .collect();
     assert_eq!(ids, vec![1, 2]);
 }
+
+/// A well-formed reply whose `result` string pads the body to about `bytes`.
+fn padded_reply(bytes: usize) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":1,"result":"{}"}}"#,
+        "x".repeat(bytes)
+    )
+}
+
+#[tokio::test]
+async fn reply_over_the_size_cap_is_rejected_without_being_buffered() {
+    let server = common::MockServer::spawn(vec![(200, padded_reply(4096))]);
+    let client = ClientBuilder::new(server.url())
+        .max_response_size(1024)
+        .build()
+        .unwrap();
+
+    match client.call_raw("help", json!([])).await {
+        Err(Error::ResponseTooLarge { limit }) => assert_eq!(limit, 1024),
+        other => panic!("expected ResponseTooLarge, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn reply_under_the_size_cap_is_accepted() {
+    let server = common::MockServer::spawn(vec![(200, padded_reply(512))]);
+    let client = ClientBuilder::new(server.url())
+        .max_response_size(1024)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        client.call_raw("help", json!([])).await.unwrap(),
+        json!("x".repeat(512))
+    );
+}
+
+#[tokio::test]
+async fn size_cap_none_accepts_a_large_reply() {
+    let server = common::MockServer::spawn(vec![(200, padded_reply(11 * 1024 * 1024))]);
+    let client = ClientBuilder::new(server.url())
+        .max_response_size(None)
+        .build()
+        .unwrap();
+
+    let v = client.call_raw("help", json!([])).await.unwrap();
+    assert_eq!(v.as_str().unwrap().len(), 11 * 1024 * 1024);
+}
+
+#[tokio::test]
+async fn zero_size_cap_fails_at_build_time() {
+    assert!(matches!(
+        ClientBuilder::new("http://127.0.0.1:8332")
+            .max_response_size(0)
+            .build(),
+        Err(Error::Config(_))
+    ));
+}

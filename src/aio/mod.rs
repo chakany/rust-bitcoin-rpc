@@ -58,6 +58,20 @@ impl ClientBuilder {
         self
     }
 
+    /// Cap the size of a reply body, or `None` for no cap. Defaults to
+    /// 64 MiB.
+    ///
+    /// A reply larger than this fails with [`Error::ResponseTooLarge`]
+    /// instead of being buffered, so a misbehaving node or proxy cannot make
+    /// the client allocate without bound. The default comfortably fits every
+    /// response this crate types, including a verbosity-3 `getblock` of a
+    /// full block; raise it or pass `None` for a verbose `getrawmempool` on
+    /// a very busy node.
+    pub fn max_response_size(mut self, limit: impl Into<Option<usize>>) -> Self {
+        self.config.max_response_size = limit.into();
+        self
+    }
+
     /// Validate the configuration, read the cookie file if one was given, and
     /// construct the client.
     pub fn build(self) -> Result<Client> {
@@ -74,6 +88,7 @@ impl ClientBuilder {
             http,
             url: self.config.url,
             authorization,
+            max_response_size: self.config.max_response_size,
             next_id: AtomicU64::new(1),
         })
     }
@@ -88,7 +103,38 @@ pub struct Client {
     http: reqwest::Client,
     url: String,
     authorization: Option<String>,
+    max_response_size: Option<usize>,
     next_id: AtomicU64,
+}
+
+impl Client {
+    /// Read the body into memory, stopping as soon as it is known to exceed
+    /// the configured cap: up front from `Content-Length` when the node sends
+    /// one, otherwise as the chunks arrive.
+    async fn read_body(&self, mut response: reqwest::Response) -> Result<Vec<u8>> {
+        let Some(limit) = self.max_response_size else {
+            return response
+                .bytes()
+                .await
+                .map(|b| b.to_vec())
+                .map_err(|e| Error::Transport(e.to_string()));
+        };
+        if response.content_length().is_some_and(|n| n > limit as u64) {
+            return Err(Error::ResponseTooLarge { limit });
+        }
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|e| Error::Transport(e.to_string()))?
+        {
+            if body.len().saturating_add(chunk.len()) > limit {
+                return Err(Error::ResponseTooLarge { limit });
+            }
+            body.extend_from_slice(&chunk);
+        }
+        Ok(body)
+    }
 }
 
 impl RpcCallAsync for Client {
@@ -116,10 +162,7 @@ impl RpcCallAsync for Client {
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?;
             let status = response.status().as_u16();
-            let bytes = response
-                .bytes()
-                .await
-                .map_err(|e| Error::Transport(e.to_string()))?;
+            let bytes = self.read_body(response).await?;
 
             parse_reply(status, &bytes, id)
         })

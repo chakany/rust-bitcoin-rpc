@@ -1004,3 +1004,63 @@ fn request_ids_increase_across_calls_and_each_reply_is_matched_to_its_own() {
         .collect();
     assert_eq!(ids, vec![1, 2]);
 }
+
+/// A well-formed reply whose `result` string pads the body to about `bytes`.
+fn padded_reply(bytes: usize) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":1,"result":"{}"}}"#,
+        "x".repeat(bytes)
+    )
+}
+
+#[test]
+fn reply_over_the_size_cap_is_rejected_without_being_buffered() {
+    let server = common::MockServer::spawn(vec![(200, padded_reply(4096))]);
+    let client = ClientBuilder::new(server.url())
+        .max_response_size(1024)
+        .build()
+        .unwrap();
+
+    match client.call_raw("help", json!([])) {
+        Err(Error::ResponseTooLarge { limit }) => assert_eq!(limit, 1024),
+        other => panic!("expected ResponseTooLarge, got {other:?}"),
+    }
+}
+
+#[test]
+fn reply_under_the_size_cap_is_accepted() {
+    let server = common::MockServer::spawn(vec![(200, padded_reply(512))]);
+    let client = ClientBuilder::new(server.url())
+        .max_response_size(1024)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        client.call_raw("help", json!([])).unwrap(),
+        json!("x".repeat(512))
+    );
+}
+
+#[test]
+fn size_cap_none_lets_a_reply_over_ureqs_own_default_through() {
+    // `ureq` caps `read_to_vec` at 10 MB on its own; `None` must override
+    // that, not fall back to it.
+    let server = common::MockServer::spawn(vec![(200, padded_reply(11 * 1024 * 1024))]);
+    let client = ClientBuilder::new(server.url())
+        .max_response_size(None)
+        .build()
+        .unwrap();
+
+    let v = client.call_raw("help", json!([])).unwrap();
+    assert_eq!(v.as_str().unwrap().len(), 11 * 1024 * 1024);
+}
+
+#[test]
+fn zero_size_cap_fails_at_build_time() {
+    assert!(matches!(
+        ClientBuilder::new("http://127.0.0.1:8332")
+            .max_response_size(0)
+            .build(),
+        Err(Error::Config(_))
+    ));
+}

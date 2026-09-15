@@ -51,6 +51,20 @@ impl ClientBuilder {
         self
     }
 
+    /// Cap the size of a reply body, or `None` for no cap. Defaults to
+    /// 64 MiB.
+    ///
+    /// A reply larger than this fails with [`Error::ResponseTooLarge`]
+    /// instead of being buffered, so a misbehaving node or proxy cannot make
+    /// the client allocate without bound. The default comfortably fits every
+    /// response this crate types, including a verbosity-3 `getblock` of a
+    /// full block; raise it or pass `None` for a verbose `getrawmempool` on
+    /// a very busy node.
+    pub fn max_response_size(mut self, limit: impl Into<Option<usize>>) -> Self {
+        self.config.max_response_size = limit.into();
+        self
+    }
+
     /// Validate the configuration, read the cookie file if one was given, and
     /// construct the client.
     pub fn build(self) -> Result<Client> {
@@ -69,6 +83,7 @@ impl ClientBuilder {
             agent,
             url: self.config.url,
             authorization,
+            max_response_size: self.config.max_response_size,
             next_id: AtomicU64::new(1),
         })
     }
@@ -83,6 +98,7 @@ pub struct Client {
     agent: ureq::Agent,
     url: String,
     authorization: Option<String>,
+    max_response_size: Option<usize>,
     next_id: AtomicU64,
 }
 
@@ -104,10 +120,22 @@ impl RpcCall for Client {
             .map_err(|e| Error::Transport(e.to_string()))?;
         let status = resp.status().as_u16();
         // A 500 from the node still carries a usable JSON-RPC error body.
+        //
+        // `ureq` caps `read_to_vec` at 10 MB unless told otherwise, so the
+        // limit is always set explicitly here: to ours, or to "unbounded"
+        // when the caller asked for no cap.
+        let limit = self.max_response_size;
         let bytes = resp
             .body_mut()
+            .with_config()
+            .limit(limit.map_or(u64::MAX, |n| n as u64))
             .read_to_vec()
-            .map_err(|e| Error::Transport(e.to_string()))?;
+            .map_err(|e| match (e, limit) {
+                (ureq::Error::BodyExceedsLimit(_), Some(limit)) => {
+                    Error::ResponseTooLarge { limit }
+                }
+                (e, _) => Error::Transport(e.to_string()),
+            })?;
 
         parse_reply(status, &bytes, id)
     }
