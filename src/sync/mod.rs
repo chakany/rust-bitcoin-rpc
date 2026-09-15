@@ -39,15 +39,43 @@ impl ClientBuilder {
         self
     }
 
-    /// Set the total per-request timeout, or `None` for no timeout at all.
-    /// Defaults to 30 seconds.
+    /// Set a total deadline for one request, from opening the connection to
+    /// the last byte of the reply, or `None` for no overall deadline.
+    /// Defaults to `None`: the connect and read timeouts below bound each
+    /// phase instead, so a large reply that keeps arriving is never cut off
+    /// merely for being large.
     ///
-    /// A long-polling method (e.g. `wait_for_new_block`) is cut short by
-    /// this timeout well before the RPC-level wait it was asked to make;
-    /// pass `None` here to let those calls block for as long as the node
-    /// takes to reply.
+    /// Set this when a caller needs a hard upper bound on how long a call
+    /// can take regardless of progress.
     pub fn timeout(mut self, timeout: impl Into<Option<Duration>>) -> Self {
         self.config.timeout = timeout.into();
+        self
+    }
+
+    /// Set how long to wait for the TCP connection (and TLS handshake, with
+    /// the `tls` feature) to be established, or `None` for no limit.
+    /// Defaults to 30 seconds.
+    pub fn connect_timeout(mut self, timeout: impl Into<Option<Duration>>) -> Self {
+        self.config.connect_timeout = timeout.into();
+        self
+    }
+
+    /// Set how long the node may take to start replying, and then how long
+    /// the whole reply body may take to arrive, or `None` for no limit.
+    /// Defaults to 60 seconds.
+    ///
+    /// Each phase gets its own budget of this length: one for the response
+    /// headers to appear, another for the body to finish. A node that is
+    /// alive but slow to answer a heavy call has the full budget to start
+    /// replying, while a dead connection is noticed within it.
+    ///
+    /// A long-polling method (`wait_for_new_block`, `wait_for_block_height`,
+    /// `get_block_template` with a `longpollid`) is cut short by this
+    /// timeout well before the RPC-level wait it was asked to make. Pass
+    /// `None` here, on a client dedicated to such calls, to let them block
+    /// for as long as the node takes to reply.
+    pub fn read_timeout(mut self, timeout: impl Into<Option<Duration>>) -> Self {
+        self.config.read_timeout = timeout.into();
         self
     }
 
@@ -75,6 +103,11 @@ impl ClientBuilder {
         // disables redirect handling entirely (ureq's default is 10).
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(self.config.timeout)
+            .timeout_connect(self.config.connect_timeout)
+            // `ureq` has no idle timeout; the closest equivalent is one
+            // budget for the headers to arrive and another for the body.
+            .timeout_recv_response(self.config.read_timeout)
+            .timeout_recv_body(self.config.read_timeout)
             .http_status_as_error(false)
             .max_redirects(0)
             .build()

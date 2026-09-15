@@ -1120,3 +1120,58 @@ async fn zero_size_cap_fails_at_build_time() {
         Err(Error::Config(_))
     ));
 }
+
+#[tokio::test]
+async fn read_timeout_aborts_a_call_the_node_never_answers() {
+    let server = common::MockServer::spawn_silent();
+    let client = ClientBuilder::new(server.url())
+        .read_timeout(std::time::Duration::from_millis(200))
+        .build()
+        .unwrap();
+
+    let started = std::time::Instant::now();
+    match client.call_raw("uptime", json!([])).await {
+        Err(Error::Transport(m)) => assert!(m.to_lowercase().contains("timed out"), "{m}"),
+        other => panic!("expected Transport error, got {other:?}"),
+    }
+    // Well under the 60 s default: the per-call setting took effect.
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    // The request did reach the server; it was the silence that failed us.
+    assert_eq!(server.requests().len(), 1);
+}
+
+#[tokio::test]
+async fn all_timeouts_none_still_builds_a_working_client() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":1,"result":true}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url())
+        .timeout(None)
+        .connect_timeout(None)
+        .read_timeout(None)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        client.call_raw("uptime", json!([])).await.unwrap(),
+        json!(true)
+    );
+}
+
+#[tokio::test]
+async fn overall_timeout_still_applies_on_top_of_the_phase_timeouts() {
+    let server = common::MockServer::spawn_silent();
+    let client = ClientBuilder::new(server.url())
+        .read_timeout(None)
+        .timeout(std::time::Duration::from_millis(200))
+        .build()
+        .unwrap();
+
+    let started = std::time::Instant::now();
+    assert!(matches!(
+        client.call_raw("uptime", json!([])).await,
+        Err(Error::Transport(_))
+    ));
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}

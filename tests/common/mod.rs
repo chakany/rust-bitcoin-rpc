@@ -45,6 +45,34 @@ impl MockServer {
         Self::spawn_with(replies, IdMode::Verbatim)
     }
 
+    /// Accept connections and read each request, but never reply: the
+    /// connection is held open, silent, until the client gives up.
+    pub fn spawn_silent() -> MockServer {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let received = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&received);
+
+        std::thread::spawn(move || {
+            let mut held = Vec::new();
+            while let Ok((mut stream, _)) = listener.accept() {
+                if let Some((authorization, buf)) = read_request(&mut stream) {
+                    sink.lock().expect("lock").push(ReceivedRequest {
+                        authorization,
+                        body: String::from_utf8_lossy(&buf).into_owned(),
+                    });
+                }
+                // Keep the socket open so the client sees silence, not EOF.
+                held.push(stream);
+            }
+        });
+
+        MockServer {
+            url: format!("http://{addr}"),
+            received,
+        }
+    }
+
     fn spawn_with(replies: Vec<(u16, String)>, mode: IdMode) -> MockServer {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().expect("addr");

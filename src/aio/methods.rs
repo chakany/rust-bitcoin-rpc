@@ -126,9 +126,10 @@ pub trait BlockchainRpc: RpcCallAsync {
     /// Waits for any new block and returns its hash and height.
     ///
     /// `timeout_ms` of `None` or `0` means no timeout at the RPC level, but
-    /// the client's own per-request timeout (`ClientBuilder::timeout`, 30
+    /// the client's own read timeout (`ClientBuilder::read_timeout`, 60
     /// seconds by default) still applies and aborts the wait with
-    /// `Error::Transport` unless the client was built with `.timeout(None)`.
+    /// `Error::Transport` unless the client was built with
+    /// `.read_timeout(None)`.
     /// `current_tip` makes the node wait for the chain tip to differ from
     /// that hash, which is more reliable than letting it sample the tip
     /// itself.
@@ -147,9 +148,10 @@ pub trait BlockchainRpc: RpcCallAsync {
     /// height of the current tip.
     ///
     /// `timeout_ms` of `None` or `0` means no timeout at the RPC level, but
-    /// the client's own per-request timeout (`ClientBuilder::timeout`, 30
+    /// the client's own read timeout (`ClientBuilder::read_timeout`, 60
     /// seconds by default) still applies and aborts the wait with
-    /// `Error::Transport` unless the client was built with `.timeout(None)`.
+    /// `Error::Transport` unless the client was built with
+    /// `.read_timeout(None)`.
     fn wait_for_block_height(
         &self,
         height: u32,
@@ -277,9 +279,10 @@ pub trait MiningRpc: RpcCallAsync {
     /// `"template"` mode is modelled — `"proposal"` mode returns a different
     /// result shape. Supplying `request.longpoll_id` makes the node hold the
     /// response until a new template is available, which can take a while;
-    /// the client's own per-request timeout (`ClientBuilder::timeout`, 30
+    /// the client's own read timeout (`ClientBuilder::read_timeout`, 60
     /// seconds by default) still applies and aborts the wait with
-    /// `Error::Transport` unless the client was built with `.timeout(None)`.
+    /// `Error::Transport` unless the client was built with
+    /// `.read_timeout(None)`.
     fn get_block_template(
         &self,
         request: &BlockTemplateRequest,

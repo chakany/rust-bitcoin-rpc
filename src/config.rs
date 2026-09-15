@@ -11,11 +11,26 @@ use crate::{Auth, Error, Result};
 /// bounding what a misbehaving node or proxy can make the client allocate.
 pub(crate) const DEFAULT_MAX_RESPONSE_SIZE: usize = 64 * 1024 * 1024;
 
+/// Default time allowed to establish the TCP (and TLS) connection.
+pub(crate) const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Default time allowed for the node to produce the next piece of its reply.
+///
+/// Long enough that a heavy call (`gettxoutsetinfo`, a verbosity-3
+/// `getblock`) is not cut off while the node is still working, short enough
+/// that a dead connection is noticed within a minute.
+pub(crate) const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(60);
+
 #[derive(Debug, Clone)]
 pub(crate) struct Config {
     pub url: String,
     pub auth: Auth,
+    /// Total deadline for one request, connect to last body byte.
     pub timeout: Option<Duration>,
+    /// Deadline for establishing the connection.
+    pub connect_timeout: Option<Duration>,
+    /// Deadline for the node to start replying, and to keep the body coming.
+    pub read_timeout: Option<Duration>,
     pub max_response_size: Option<usize>,
 }
 
@@ -24,7 +39,9 @@ impl Config {
         Config {
             url: url.into(),
             auth: Auth::None,
-            timeout: Some(Duration::from_secs(30)),
+            timeout: None,
+            connect_timeout: Some(DEFAULT_CONNECT_TIMEOUT),
+            read_timeout: Some(DEFAULT_READ_TIMEOUT),
             max_response_size: Some(DEFAULT_MAX_RESPONSE_SIZE),
         }
     }
@@ -50,10 +67,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_to_no_auth_and_30s_timeout() {
+    fn defaults_to_no_auth_split_timeouts_and_a_64mib_cap() {
         let c = Config::new("http://127.0.0.1:8332");
         assert_eq!(c.auth, crate::Auth::None);
-        assert_eq!(c.timeout, Some(std::time::Duration::from_secs(30)));
+        assert_eq!(c.timeout, None);
+        assert_eq!(c.connect_timeout, Some(Duration::from_secs(30)));
+        assert_eq!(c.read_timeout, Some(Duration::from_secs(60)));
         assert_eq!(c.max_response_size, Some(64 * 1024 * 1024));
     }
 

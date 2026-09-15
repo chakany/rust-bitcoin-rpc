@@ -81,6 +81,24 @@ in `examples/btc-cli.rs`, and the `blocks`/`chain` fields on the
 fixture test in `tests/serde_fixtures.rs`. Only the network round-trip to a
 real node is untested — see [Scope](#scope).
 
+## Configuration
+
+Both `ClientBuilder`s take the same knobs; every one accepts `None` to turn
+the limit off.
+
+| Setter | Default | What it bounds |
+| --- | --- | --- |
+| `auth` | `Auth::None` | Credentials: `Auth::user_pass(..)` or `Auth::cookie_file(..)`. |
+| `connect_timeout` | 30 s | Establishing the TCP connection (and TLS handshake). |
+| `read_timeout` | 60 s | How long the node may take to start replying, and to keep the body coming. Async: an idle timeout that restarts on every read. Sync: one budget for the headers, another for the body. |
+| `timeout` | `None` | A hard overall deadline for the whole request, on top of the two above. |
+| `max_response_size` | 64 MiB | The reply body; a larger one fails with `Error::ResponseTooLarge` instead of being buffered. |
+
+A long-polling call (`wait_for_new_block`, `wait_for_block_height`,
+`get_block_template` with a `longpollid`) is cut short by `read_timeout`
+long before the RPC-level wait it asked for. Build a separate client with
+`.read_timeout(None)` for those.
+
 ## Adding your own RPC
 
 This crate ships 44 typed methods (see [Scope](#scope) below) but not every
