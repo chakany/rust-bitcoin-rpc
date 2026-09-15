@@ -164,10 +164,13 @@ fn block_full() {
     assert_eq!(block.size, 285);
     assert_eq!(block.stripped_size, 285);
     assert_eq!(block.weight, 1140);
-    assert_eq!(block.coinbase_tx.version, 1);
-    assert_eq!(block.coinbase_tx.sequence, 4294967295);
-    assert_eq!(block.coinbase_tx.coinbase, "04ffff001d0102");
-    assert!(block.coinbase_tx.witness.is_some());
+    assert_eq!(block.coinbase_tx.as_ref().unwrap().version, 1);
+    assert_eq!(block.coinbase_tx.as_ref().unwrap().sequence, 4294967295);
+    assert_eq!(
+        block.coinbase_tx.as_ref().unwrap().coinbase,
+        "04ffff001d0102"
+    );
+    assert!(block.coinbase_tx.as_ref().unwrap().witness.is_some());
     assert_eq!(
         block.tx,
         vec!["2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"]
@@ -191,7 +194,7 @@ fn block_minimal_and_forward_compatible() {
     });
     let block: Block = serde_json::from_value(v).unwrap();
     assert_eq!(block.height, 0);
-    assert_eq!(block.coinbase_tx.witness, None);
+    assert_eq!(block.coinbase_tx.as_ref().unwrap().witness, None);
     assert!(block.tx.is_empty());
     assert_eq!(block.previous_block_hash, None);
     assert_eq!(block.next_block_hash, None);
@@ -235,7 +238,7 @@ fn block_with_txs_full() {
     });
     let block: BlockWithTxs = serde_json::from_value(v).unwrap();
     assert_eq!(block.height, 100);
-    assert_eq!(block.coinbase_tx.locktime, 0);
+    assert_eq!(block.coinbase_tx.as_ref().unwrap().locktime, 0);
     assert_eq!(block.tx.len(), 1);
     // `fee` is a JSON number even though Core documents it as STR_AMOUNT.
     // Reached *through* the flattened `tx`: proves `serde(flatten)` really
@@ -350,7 +353,10 @@ fn deployment_info_full() {
     });
     let info: DeploymentInfo = serde_json::from_value(v).unwrap();
     assert_eq!(info.height, 800000);
-    assert_eq!(info.script_flags, vec!["P2SH", "WITNESS", "TAPROOT"]);
+    assert_eq!(
+        info.script_flags.clone().unwrap(),
+        vec!["P2SH", "WITNESS", "TAPROOT"]
+    );
     let taproot = &info.deployments["taproot"];
     assert_eq!(taproot.deployment_type, "bip9");
     assert_eq!(taproot.height, Some(709632));
@@ -392,7 +398,7 @@ fn deployment_info_minimal_and_forward_compatible() {
         "some_field_from_a_future_release": {}
     });
     let info: DeploymentInfo = serde_json::from_value(v).unwrap();
-    assert!(info.script_flags.is_empty());
+    assert!(info.script_flags.as_ref().unwrap().is_empty());
     let segwit = &info.deployments["segwit"];
     assert_eq!(segwit.deployment_type, "buried");
     assert_eq!(segwit.height, None);
@@ -508,11 +514,11 @@ fn get_mempool_info_full() {
     assert_eq!(info.min_relay_tx_fee, FeeRate::from_sat_per_kvb(1_000));
     assert_eq!(info.incremental_relay_fee, FeeRate::from_sat_per_kvb(1_000));
     assert_eq!(info.unbroadcast_count, 3);
-    assert!(info.permit_bare_multisig);
-    assert_eq!(info.max_datacarrier_size, 83);
-    assert_eq!(info.limit_cluster_count, 500);
-    assert_eq!(info.limit_cluster_size, 101000);
-    assert!(info.optimal);
+    assert_eq!(info.permit_bare_multisig, Some(true));
+    assert_eq!(info.max_datacarrier_size, Some(83));
+    assert_eq!(info.limit_cluster_count, Some(500));
+    assert_eq!(info.limit_cluster_size, Some(101000));
+    assert_eq!(info.optimal, Some(true));
 }
 
 #[test]
@@ -535,7 +541,7 @@ fn get_mempool_info_forward_compatible() {
     let info: MempoolInfo = serde_json::from_value(v).unwrap();
     assert!(!info.loaded);
     assert_eq!(info.size, 0);
-    assert!(!info.optimal);
+    assert_eq!(info.optimal, Some(false));
 }
 
 #[test]
@@ -565,7 +571,7 @@ fn mempool_entry_full() {
     assert_eq!(entry.descendant_size, 408);
     assert_eq!(entry.ancestor_count, 1);
     assert_eq!(entry.ancestor_size, 204);
-    assert_eq!(entry.chunk_weight, 816);
+    assert_eq!(entry.chunk_weight, Some(816));
     assert_eq!(
         entry.wtxid,
         "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"
@@ -575,7 +581,7 @@ fn mempool_entry_full() {
     assert_eq!(entry.fees.modified, Amount::from_sat(12_400));
     assert_eq!(entry.fees.ancestor, Amount::from_sat(12_345));
     assert_eq!(entry.fees.descendant, Amount::from_sat(24_690));
-    assert_eq!(entry.fees.chunk, Amount::from_sat(12_345));
+    assert_eq!(entry.fees.chunk, Some(Amount::from_sat(12_345)));
     assert_eq!(entry.depends.len(), 1);
     assert_eq!(entry.spent_by.len(), 1);
     assert!(!entry.unbroadcast);
@@ -750,8 +756,8 @@ fn peer_info_full() {
     assert_eq!(peer.mapped_as, Some(12345));
     assert_eq!(peer.services_names, vec!["NETWORK", "WITNESS"]);
     assert!(peer.relay_txes);
-    assert_eq!(peer.last_inv_sequence, 42);
-    assert_eq!(peer.inv_to_send, 3);
+    assert_eq!(peer.last_inv_sequence, Some(42));
+    assert_eq!(peer.inv_to_send, Some(3));
     assert_eq!(peer.last_send, 1690000100);
     assert_eq!(peer.last_recv, 1690000099);
     assert_eq!(peer.bytes_sent, 123456);
@@ -870,7 +876,10 @@ fn get_mining_info_full() {
     assert_eq!(info.network_hash_ps, 350000000000000000000.0);
     assert_eq!(info.pooled_tx, 120);
     // blockmintxfee is the one STR_AMOUNT in mining.cpp: an unquoted JSON number.
-    assert_eq!(info.block_min_tx_fee, FeeRate::from_sat_per_kvb(1_000));
+    assert_eq!(
+        info.block_min_tx_fee,
+        Some(FeeRate::from_sat_per_kvb(1_000))
+    );
     assert_eq!(info.chain, "main");
     assert_eq!(info.signet_challenge.as_deref(), Some("51"));
     assert_eq!(info.next.height, 800001);
@@ -1946,4 +1955,146 @@ fn psbt_decoded_live_musig2_payload() {
     assert_eq!(i.taproot_scripts.as_ref().unwrap()[0].leaf_ver, 192);
     assert!(i.taproot_merkle_root.is_some());
     assert!(i.witness_utxo.is_some());
+}
+
+// ---------------------------------------------------------------------------
+// Bitcoin Core v29 wire shapes. Key sets captured from a live v29.0 mainnet
+// node; every field Core added in v30 or v31 is absent and must come back
+// `None`, and fields v29 still emitted but later releases dropped
+// (`fullrbf`, `startingheight`) must be tolerated as unknown extras.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn v29_block_has_no_coinbase_tx() {
+    let v = json!({
+        "hash": "0000000000000000000077daa3b846a63cf32ddde28261fc8ba5e612b7fa1f9e",
+        "confirmations": 1, "size": 1556897, "strippedsize": 774889, "weight": 3881564,
+        "height": 967118, "version": 536870912, "versionHex": "20000000",
+        "merkleroot": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
+        "tx": ["2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"],
+        "time": 1757950000, "mediantime": 1757946000, "nonce": 2573394689_u64,
+        "bits": "17023a04", "target": "00000000000000000002a7c4000000000000000000000000000000000000000",
+        "difficulty": 1.274507897158431e14, "chainwork": "6500650065", "nTx": 1,
+        "previousblockhash": "000000007bc154e0fa7ea32218a72fe2c1bb9f86cf8c9ebf9a715ed27fdb229a"
+    });
+    let block: Block = serde_json::from_value(v.clone()).unwrap();
+    assert_eq!(block.coinbase_tx, None);
+    assert_eq!(block.height, 967118);
+
+    let mut v2 = v;
+    v2["tx"] = json!([{
+        "txid": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
+        "hash": "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866",
+        "version": 1, "size": 204, "vsize": 204, "weight": 816, "locktime": 0,
+        "vin": [{"coinbase": "04ffff001d0102", "sequence": 4294967295_u64}],
+        "vout": [{"value": 3.125, "n": 0, "scriptPubKey": {
+            "asm": "0 abcdef01", "desc": "addr(bc1q...)#x", "hex": "0014abcdef01",
+            "address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "type": "witness_v0_keyhash"}}],
+        "hex": "0100000001", "fee": 0.0
+    }]);
+    let block: BlockWithTxs = serde_json::from_value(v2).unwrap();
+    assert_eq!(block.coinbase_tx, None);
+    assert_eq!(block.tx[0].tx.vout[0].value, Amount::from_sat(312_500_000));
+}
+
+#[test]
+fn v29_deployment_info_has_no_script_flags() {
+    let v = json!({
+        "hash": "0000000000000000000077daa3b846a63cf32ddde28261fc8ba5e612b7fa1f9e",
+        "height": 967118,
+        "deployments": {
+            "bip34": {"type": "buried", "active": true, "height": 227931},
+            "segwit": {"type": "buried", "active": true, "height": 481824},
+            "taproot": {"type": "bip9", "active": true, "height": 709632, "bip9": {
+                "start_time": 1619222400, "timeout": 1628640000, "min_activation_height": 709632,
+                "status": "active", "since": 709632, "status_next": "active"}}
+        }
+    });
+    let info: DeploymentInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.script_flags, None);
+    assert_eq!(info.deployments.len(), 3);
+    assert!(
+        info.deployments["taproot"]
+            .bip9
+            .as_ref()
+            .unwrap()
+            .statistics
+            .is_none()
+    );
+}
+
+#[test]
+fn v29_mempool_info_lacks_the_v30_and_v31_fields_and_still_has_fullrbf() {
+    let v = json!({
+        "loaded": true, "size": 35953, "bytes": 21694447, "usage": 130469424,
+        "total_fee": 0.30655184, "maxmempool": 300000000_u64,
+        "mempoolminfee": 0.00001000, "minrelaytxfee": 0.00000100,
+        "incrementalrelayfee": 0.00001000, "unbroadcastcount": 0,
+        "fullrbf": true
+    });
+    let info: MempoolInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.size, 35953);
+    assert_eq!(info.total_fee, Amount::from_sat(30_655_184));
+    assert_eq!(info.min_relay_tx_fee, FeeRate::from_sat_per_kvb(100));
+    assert_eq!(info.permit_bare_multisig, None);
+    assert_eq!(info.max_datacarrier_size, None);
+    assert_eq!(info.limit_cluster_count, None);
+    assert_eq!(info.limit_cluster_size, None);
+    assert_eq!(info.optimal, None);
+}
+
+#[test]
+fn v29_mempool_entry_has_no_chunk_fields() {
+    let v = json!({
+        "vsize": 141, "weight": 561, "time": 1757950123, "height": 967118,
+        "descendantcount": 1, "descendantsize": 141,
+        "ancestorcount": 1, "ancestorsize": 141,
+        "wtxid": "0b81d33652f7dcc3cabd44f62c0fb5a9578a6c3a2d2cd6661bf3ef6aec59cba5",
+        "fees": {"base": 0.00000141, "modified": 0.00000141, "ancestor": 0.00000141, "descendant": 0.00000141},
+        "depends": [], "spentby": [], "bip125-replaceable": true, "unbroadcast": false
+    });
+    let entry: MempoolEntry = serde_json::from_value(v).unwrap();
+    assert_eq!(entry.chunk_weight, None);
+    assert_eq!(entry.fees.chunk, None);
+    assert_eq!(entry.fees.base, Amount::from_sat(141));
+}
+
+#[test]
+fn v29_peer_info_has_no_inventory_counters_and_still_has_startingheight() {
+    let v = json!({
+        "id": 3, "addr": "203.0.113.7:8333", "addrbind": "10.0.0.1:41234", "network": "ipv4",
+        "services": "0000000000000c09", "servicesnames": ["NETWORK", "WITNESS", "NETWORK_LIMITED", "P2P_V2"],
+        "relaytxes": true, "lastsend": 1757950100, "lastrecv": 1757950099,
+        "last_transaction": 1757950000, "last_block": 1757949000,
+        "bytessent": 123456, "bytesrecv": 654321, "conntime": 1757900000, "timeoffset": 0,
+        "pingtime": 0.05, "minping": 0.04, "version": 70016, "subver": "/Satoshi:29.0.0/",
+        "inbound": false, "bip152_hb_to": false, "bip152_hb_from": false,
+        "startingheight": 967000, "presynced_headers": -1,
+        "synced_headers": 967118, "synced_blocks": 967118, "inflight": [],
+        "addr_relay_enabled": true, "addr_processed": 100, "addr_rate_limited": 0,
+        "permissions": [], "minfeefilter": 0.00001000,
+        "bytessent_per_msg": {"ping": 32}, "bytesrecv_per_msg": {"pong": 32},
+        "connection_type": "outbound-full-relay",
+        "transport_protocol_type": "v2", "session_id": "abcd1234"
+    });
+    let peer: PeerInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(peer.last_inv_sequence, None);
+    assert_eq!(peer.inv_to_send, None);
+    assert_eq!(peer.sub_ver, "/Satoshi:29.0.0/");
+}
+
+#[test]
+fn v29_mining_info_has_no_blockmintxfee() {
+    let v = json!({
+        "blocks": 967118, "currentblockweight": 3999000, "currentblocktx": 4000,
+        "bits": "17023a04", "difficulty": 1.274507897158431e14,
+        "target": "00000000000000000002a7c4000000000000000000000000000000000000000",
+        "networkhashps": 1.011699535963271e21, "pooledtx": 35953, "chain": "main",
+        "next": {"height": 967119, "bits": "17023a04", "difficulty": 1.274507897158431e14,
+                 "target": "00000000000000000002a7c4000000000000000000000000000000000000000"},
+        "warnings": []
+    });
+    let info: MiningInfo = serde_json::from_value(v).unwrap();
+    assert_eq!(info.block_min_tx_fee, None);
+    assert_eq!(info.next.height, 967119);
 }

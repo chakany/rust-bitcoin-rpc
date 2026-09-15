@@ -44,22 +44,33 @@ pub struct MempoolInfo {
     #[cfg_attr(feature = "serde", serde(rename = "unbroadcastcount"))]
     pub unbroadcast_count: u64,
     /// True if the mempool accepts transactions with bare multisig outputs.
-    #[cfg_attr(feature = "serde", serde(rename = "permitbaremultisig"))]
-    pub permit_bare_multisig: bool,
+    ///
+    /// Absent from nodes before Bitcoin Core v30, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default, rename = "permitbaremultisig"))]
+    pub permit_bare_multisig: Option<bool>,
     /// Maximum number of bytes that can be used by OP_RETURN outputs in the
     /// mempool.
-    #[cfg_attr(feature = "serde", serde(rename = "maxdatacarriersize"))]
-    pub max_datacarrier_size: u64,
+    ///
+    /// Absent from nodes before Bitcoin Core v30, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default, rename = "maxdatacarriersize"))]
+    pub max_datacarrier_size: Option<u64>,
     /// Maximum number of transactions that can be in a cluster (configured by
     /// `-limitclustercount`).
-    #[cfg_attr(feature = "serde", serde(rename = "limitclustercount"))]
-    pub limit_cluster_count: u64,
+    ///
+    /// Absent from nodes before Bitcoin Core v31, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default, rename = "limitclustercount"))]
+    pub limit_cluster_count: Option<u64>,
     /// Maximum size of a cluster in virtual bytes (configured by
     /// `-limitclustersize`).
-    #[cfg_attr(feature = "serde", serde(rename = "limitclustersize"))]
-    pub limit_cluster_size: u64,
+    ///
+    /// Absent from nodes before Bitcoin Core v31, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default, rename = "limitclustersize"))]
+    pub limit_cluster_size: Option<u64>,
     /// If the mempool is in a known-optimal transaction ordering.
-    pub optimal: bool,
+    ///
+    /// Absent from nodes before Bitcoin Core v31, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub optimal: Option<bool>,
 }
 
 /// Per-fee-context breakdown of a mempool entry's fees.
@@ -77,7 +88,10 @@ pub struct MempoolEntryFees {
     /// fee deltas used for mining priority.
     pub descendant: Amount,
     /// Transaction fees of the chunk.
-    pub chunk: Amount,
+    ///
+    /// Absent from nodes before Bitcoin Core v31, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub chunk: Option<Amount>,
 }
 
 /// Mempool data for a single transaction, as returned by `getmempoolentry` and
@@ -115,8 +129,10 @@ pub struct MempoolEntry {
     pub ancestor_size: u64,
     /// Sigops-adjusted weight (as defined in BIP 141 and modified by
     /// `-bytespersigop`) of this transaction's chunk.
-    #[cfg_attr(feature = "serde", serde(rename = "chunkweight"))]
-    pub chunk_weight: u64,
+    ///
+    /// Absent from nodes before Bitcoin Core v31, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default, rename = "chunkweight"))]
+    pub chunk_weight: Option<u64>,
     /// Hash of serialized transaction, including witness data.
     pub wtxid: String,
     /// Breakdown of this transaction's fees.

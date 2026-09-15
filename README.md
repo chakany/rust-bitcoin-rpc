@@ -1,7 +1,8 @@
 # bitcoind-rpc-client
 
-A JSON-RPC client for Bitcoin Core v31.1, with blocking and async
-implementations that share one typed method set.
+A JSON-RPC client for Bitcoin Core, with blocking and async implementations
+that share one typed method set. The types follow Core v31.1 and accept
+replies from v29 onward.
 
 ## Install
 
@@ -244,12 +245,24 @@ Not covered, deliberately:
 
 Use the extension-trait pattern above for anything on the "not covered" list.
 
+### Node versions
+
+The result types are transcribed from Bitcoin Core v31.1. A node running
+v29 or v30 works too: every field Core added after v29 is an `Option` that
+comes back `None` from an older node, and each such field's doc comment
+names the release that introduced it (`getblock`'s `coinbase_tx`,
+`getmempoolinfo`'s cluster-mempool limits, `getpeerinfo`'s inventory
+counters, and so on). Fields a newer node adds that this crate does not know
+about are ignored. Nodes before v29 are not supported: v29 is where Core
+switched to JSON-RPC 2.0 replies, which the transport relies on.
+
 This crate has been verified against the Bitcoin Core v31.1 source and
 against a mock HTTP server (see `tests/`). The PSBT result types are
 additionally checked against payloads captured from a live bitcoind v31.1 on
 regtest (`tests/data/`): each one is deserialized and re-serialized, so a
-field this crate failed to model would show up as missing. The remaining
-methods have not yet been exercised against a live node's happy path.
+field this crate failed to model would show up as missing. Every read-only
+method has also been exercised, through both clients, against a live Bitcoin
+Core v29.0 mainnet node.
 
 ## Errors
 

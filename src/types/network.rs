@@ -126,9 +126,15 @@ pub struct PeerInfo {
     #[cfg_attr(feature = "serde", serde(rename = "relaytxes"))]
     pub relay_txes: bool,
     /// Mempool sequence number of this peer's last INV.
-    pub last_inv_sequence: u64,
+    ///
+    /// Absent from nodes before Bitcoin Core v31, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub last_inv_sequence: Option<u64>,
     /// How many txs we have queued to announce to this peer.
-    pub inv_to_send: u64,
+    ///
+    /// Absent from nodes before Bitcoin Core v31, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub inv_to_send: Option<u64>,
     /// The unix epoch time of the last send.
     #[cfg_attr(feature = "serde", serde(rename = "lastsend"))]
     pub last_send: i64,

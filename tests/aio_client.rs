@@ -220,8 +220,11 @@ async fn get_block_with_txs_sends_verbosity_2_and_deserializes() {
     .unwrap();
     assert_eq!(block.height, 100);
     assert_eq!(block.stripped_size, 285);
-    assert_eq!(block.coinbase_tx.sequence, 4294967295);
-    assert_eq!(block.coinbase_tx.witness.as_deref(), Some("00"));
+    assert_eq!(block.coinbase_tx.as_ref().unwrap().sequence, 4294967295);
+    assert_eq!(
+        block.coinbase_tx.as_ref().unwrap().witness.as_deref(),
+        Some("00")
+    );
     assert_eq!(block.tx.len(), 1);
     assert_eq!(block.tx[0].tx.fee, Some(Amount::from_sat(12_345)));
     // Reached through the `serde(flatten)`-ed transaction body.
@@ -266,7 +269,7 @@ async fn get_deployment_info_omits_absent_block_hash() {
     let client = ClientBuilder::new(server.url()).build().unwrap();
 
     let info = client.get_deployment_info(None).await.unwrap();
-    assert_eq!(info.script_flags, vec!["P2SH"]);
+    assert_eq!(info.script_flags.clone().unwrap(), vec!["P2SH"]);
     assert_eq!(info.deployments["segwit"].deployment_type, "buried");
     assert_eq!(info.deployments["segwit"].bip9, None);
 

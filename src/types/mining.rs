@@ -43,8 +43,10 @@ pub struct MiningInfo {
     #[cfg_attr(feature = "serde", serde(rename = "pooledtx"))]
     pub pooled_tx: u64,
     /// Minimum feerate of packages selected for block inclusion.
-    #[cfg_attr(feature = "serde", serde(rename = "blockmintxfee"))]
-    pub block_min_tx_fee: FeeRate,
+    ///
+    /// Absent from nodes before Bitcoin Core v30, so `None` there.
+    #[cfg_attr(feature = "serde", serde(default, rename = "blockmintxfee"))]
+    pub block_min_tx_fee: Option<FeeRate>,
     /// Current network name.
     pub chain: String,
     /// The block challenge (aka. block script), in hexadecimal. Only present
