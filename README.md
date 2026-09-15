@@ -262,7 +262,8 @@ additionally checked against payloads captured from a live bitcoind v31.1 on
 regtest (`tests/data/`): each one is deserialized and re-serialized, so a
 field this crate failed to model would show up as missing. Every read-only
 method has also been exercised, through both clients, against a live Bitcoin
-Core v29.0 mainnet node.
+Core v29.0 mainnet node; `tests/live_node.rs` repeats that survey against any
+node you point it at (ignored by default, see its module docs).
 
 ## Errors
 
