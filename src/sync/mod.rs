@@ -109,6 +109,6 @@ impl RpcCall for Client {
             .read_to_vec()
             .map_err(|e| Error::Transport(e.to_string()))?;
 
-        parse_reply(status, &bytes)
+        parse_reply(status, &bytes, id)
     }
 }

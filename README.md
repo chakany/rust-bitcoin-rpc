@@ -192,7 +192,9 @@ Every fallible call returns `bitcoin_rpc::Result<T>`, an alias for
 - `Transport` — the HTTP request failed, or the node's HTTP-level response
   could not be turned into a JSON-RPC reply (for example, a `401` from a
   node that rejected the supplied credentials arrives this way, naming the
-  status in the message).
+  status in the message). A reply whose JSON-RPC `id` does not match the
+  request's is also rejected here: every request carries a fresh id, and a
+  reply answering some other id is never handed back as this call's result.
 - `Json` — the reply body was not the JSON expected at the JSON-RPC layer.
 - `Rpc` — the node executed the request and returned a JSON-RPC error. Its
   `code` is Core's raw `RPC_*` constant from `src/rpc/protocol.h`.

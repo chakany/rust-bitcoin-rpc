@@ -1013,3 +1013,52 @@ async fn descriptor_process_psbt_deserializes_the_incomplete_shape() {
         json!(["cHNidP8BAFIC", ["wpkh(02aa)#checksum"], "ALL", true, false])
     );
 }
+
+#[tokio::test]
+async fn reply_with_a_different_id_is_rejected_as_a_transport_error() {
+    // The client's first request carries id 1; the "node" answers id 7 with a
+    // perfectly well-formed result. That result belongs to some other request
+    // and must not be returned as this one's.
+    let server = common::MockServer::spawn_verbatim(vec![(
+        200,
+        r#"{"jsonrpc":"2.0","id":7,"result":true}"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    match client.call_raw("uptime", json!([])).await {
+        Err(Error::Transport(m)) => {
+            assert!(m.contains("reply id 7"), "{m}");
+            assert!(m.contains("request id 1"), "{m}");
+        }
+        other => panic!("expected Transport error, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn request_ids_increase_across_calls_and_each_reply_is_matched_to_its_own() {
+    let server = common::MockServer::spawn(vec![
+        (200, r#"{"jsonrpc":"2.0","id":1,"result":1}"#.to_string()),
+        (200, r#"{"jsonrpc":"2.0","id":1,"result":2}"#.to_string()),
+    ]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    assert_eq!(
+        client.call_raw("uptime", json!([])).await.unwrap(),
+        json!(1)
+    );
+    assert_eq!(
+        client.call_raw("uptime", json!([])).await.unwrap(),
+        json!(2)
+    );
+
+    let ids: Vec<u64> = server
+        .requests()
+        .iter()
+        .map(|r| {
+            serde_json::from_str::<serde_json::Value>(&r.body).unwrap()["id"]
+                .as_u64()
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(ids, vec![1, 2]);
+}

@@ -121,7 +121,7 @@ impl RpcCallAsync for Client {
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?;
 
-            parse_reply(status, &bytes)
+            parse_reply(status, &bytes, id)
         })
     }
 }
