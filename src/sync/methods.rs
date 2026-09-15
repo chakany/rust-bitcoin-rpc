@@ -44,6 +44,16 @@ pub trait BlockchainRpc: RpcCall {
         self.call("getblockhash", positional(vec![json!(height)]))
     }
 
+    /// Returns the hashes of the blocks at `heights`, in one batched round
+    /// trip; the result lines up with `heights` index for index.
+    ///
+    /// Any height the node rejects (past the tip, say) fails the whole call
+    /// with that `Error::Rpc`.
+    fn get_block_hashes(&self, heights: &[u32]) -> Result<Vec<String>> {
+        let params = heights.iter().map(|h| positional(vec![json!(h)])).collect();
+        self.call_batch("getblockhash", params)
+    }
+
     /// Returns the serialized, hex-encoded data for the block `hash`.
     fn get_block_hex(&self, hash: &str) -> Result<String> {
         self.call("getblock", positional(vec![json!(hash), json!(0)]))
@@ -64,6 +74,19 @@ pub trait BlockchainRpc: RpcCall {
     /// Returns information about the block header of block `hash`.
     fn get_block_header(&self, hash: &str) -> Result<BlockHeader> {
         self.call("getblockheader", positional(vec![json!(hash), json!(true)]))
+    }
+
+    /// Returns the headers of the blocks `hashes`, in one batched round trip;
+    /// the result lines up with `hashes` index for index.
+    ///
+    /// Any hash the node does not know fails the whole call with that
+    /// `Error::Rpc`.
+    fn get_block_headers(&self, hashes: &[&str]) -> Result<Vec<BlockHeader>> {
+        let params = hashes
+            .iter()
+            .map(|h| positional(vec![json!(h), json!(true)]))
+            .collect();
+        self.call_batch("getblockheader", params)
     }
 
     /// Returns the serialized, hex-encoded data for the block header of block

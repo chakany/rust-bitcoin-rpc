@@ -13,11 +13,11 @@ pub(crate) struct Request<'a> {
     pub jsonrpc: &'static str,
     pub id: u64,
     pub method: &'a str,
-    pub params: Value,
+    pub params: &'a Value,
 }
 
 impl<'a> Request<'a> {
-    pub(crate) fn new(id: u64, method: &'a str, params: Value) -> Self {
+    pub(crate) fn new(id: u64, method: &'a str, params: &'a Value) -> Self {
         Request {
             jsonrpc: "2.0",
             id,
@@ -114,6 +114,87 @@ pub(crate) fn parse_reply(status: u16, bytes: &[u8], expected: u64) -> Result<Va
     }
 }
 
+/// Turn an HTTP status and reply body into the per-call results of a JSON-RPC
+/// batch whose requests carried the ids `first_id..first_id + count`.
+///
+/// The outer `Result` is the batch as a whole: the HTTP exchange, the shape
+/// of the reply and its correlation with what was sent. Each inner `Result`
+/// is one call, in the order the requests were given, regardless of the
+/// order the node answered in (JSON-RPC 2.0 lets it reorder; Bitcoin Core
+/// happens not to). Every expected id must be answered exactly once, or the
+/// whole batch is a transport error: a missing or repeated reply means the
+/// results cannot be trusted to line up with the requests.
+///
+/// Bitcoin Core answers a batch it could not read at all (not a JSON array)
+/// with a single error object, id `null`; that surfaces as the batch-level
+/// `Error::Rpc`.
+pub(crate) fn parse_batch_reply(
+    status: u16,
+    bytes: &[u8],
+    first_id: u64,
+    count: usize,
+) -> Result<Vec<Result<Value>>> {
+    let replies: Vec<Response> = match serde_json::from_slice(bytes) {
+        Ok(replies) => replies,
+        Err(e) => {
+            // Not an array. A lone error object is the node rejecting the
+            // batch as a whole; anything else follows the single-call rules.
+            return match serde_json::from_slice::<Response>(bytes) {
+                Ok(reply @ Response { error: Some(_), .. }) => Err(reply
+                    .into_result(first_id)
+                    .expect_err("a reply carrying an error never yields Ok")),
+                _ if (200..300).contains(&status) => Err(Error::Json(e)),
+                _ => Err(Error::Transport(http_failure(
+                    status,
+                    &String::from_utf8_lossy(bytes),
+                ))),
+            };
+        }
+    };
+
+    if replies.len() != count {
+        return Err(Error::Transport(format!(
+            "batch reply has {} entries for {count} requests",
+            replies.len()
+        )));
+    }
+
+    let mut slots: Vec<Option<Result<Value>>> = (0..count).map(|_| None).collect();
+    for reply in replies {
+        let offset = match &reply.id {
+            Some(Value::Number(n)) => n
+                .as_u64()
+                .and_then(|id| id.checked_sub(first_id))
+                .filter(|offset| *offset < count as u64),
+            _ => None,
+        };
+        let Some(offset) = offset else {
+            return Err(Error::Transport(format!(
+                "batch reply id {} does not match any request id in {first_id}..{}",
+                match &reply.id {
+                    Some(id) => id.to_string(),
+                    None => "<absent>".to_string(),
+                },
+                first_id + count as u64
+            )));
+        };
+        let slot = &mut slots[offset as usize];
+        if slot.is_some() {
+            return Err(Error::Transport(format!(
+                "batch reply answers request id {} twice",
+                first_id + offset
+            )));
+        }
+        *slot = Some(reply.into_result(first_id + offset));
+    }
+
+    // Lengths match and every id landed in a distinct slot, so none is empty.
+    Ok(slots
+        .into_iter()
+        .map(|slot| slot.expect("every slot filled"))
+        .collect())
+}
+
 fn http_failure(status: u16, body: &str) -> String {
     let hint = match status {
         401 | 403 => " — check the RPC credentials (--rpcuser/--rpcpassword or the cookie file)",
@@ -139,7 +220,7 @@ mod tests {
             jsonrpc: "2.0",
             id: 7,
             method: "getblockhash",
-            params: json!([100]),
+            params: &json!([100]),
         };
         let v = serde_json::to_value(&req).unwrap();
         assert_eq!(
@@ -316,5 +397,108 @@ mod tests {
             }
             other => panic!("expected Transport error, got {other:?}"),
         }
+    }
+
+    fn ok_value(r: &Result<Value>) -> &Value {
+        match r {
+            Ok(v) => v,
+            Err(e) => panic!("expected Ok, got {e:?}"),
+        }
+    }
+
+    #[test]
+    fn batch_results_come_back_in_request_order() {
+        let raw =
+            br#"[{"jsonrpc":"2.0","id":5,"result":"a"},{"jsonrpc":"2.0","id":6,"result":"b"}]"#;
+        let out = parse_batch_reply(200, raw, 5, 2).unwrap();
+        assert_eq!(ok_value(&out[0]), "a");
+        assert_eq!(ok_value(&out[1]), "b");
+    }
+
+    #[test]
+    fn batch_replies_are_matched_by_id_not_position() {
+        let raw =
+            br#"[{"jsonrpc":"2.0","id":6,"result":"b"},{"jsonrpc":"2.0","id":5,"result":"a"}]"#;
+        let out = parse_batch_reply(200, raw, 5, 2).unwrap();
+        assert_eq!(ok_value(&out[0]), "a");
+        assert_eq!(ok_value(&out[1]), "b");
+    }
+
+    #[test]
+    fn batch_keeps_a_per_call_rpc_error_in_its_slot() {
+        let raw = br#"[{"jsonrpc":"2.0","id":1,"result":"a"},{"jsonrpc":"2.0","id":2,"error":{"code":-8,"message":"Block height out of range"}}]"#;
+        let out = parse_batch_reply(200, raw, 1, 2).unwrap();
+        assert_eq!(ok_value(&out[0]), "a");
+        match &out[1] {
+            Err(Error::Rpc(e)) => assert_eq!(e.code, -8),
+            other => panic!("expected Rpc error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn batch_with_the_wrong_number_of_replies_is_a_transport_error() {
+        let raw = br#"[{"jsonrpc":"2.0","id":1,"result":"a"}]"#;
+        match parse_batch_reply(200, raw, 1, 2) {
+            Err(Error::Transport(m)) => assert!(m.contains("1 entries for 2 requests"), "{m}"),
+            other => panic!("expected Transport error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn batch_answering_one_id_twice_is_a_transport_error() {
+        let raw =
+            br#"[{"jsonrpc":"2.0","id":1,"result":"a"},{"jsonrpc":"2.0","id":1,"result":"a"}]"#;
+        match parse_batch_reply(200, raw, 1, 2) {
+            Err(Error::Transport(m)) => assert!(m.contains("twice"), "{m}"),
+            other => panic!("expected Transport error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn batch_with_an_id_outside_the_request_range_is_a_transport_error() {
+        for id in ["0", "3", "null", "\"1\""] {
+            let raw = format!(
+                r#"[{{"jsonrpc":"2.0","id":1,"result":"a"}},{{"jsonrpc":"2.0","id":{id},"result":"b"}}]"#
+            );
+            match parse_batch_reply(200, raw.as_bytes(), 1, 2) {
+                Err(Error::Transport(m)) => assert!(m.contains("does not match"), "{id}: {m}"),
+                other => panic!("{id}: expected Transport error, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn batch_rejected_as_a_whole_surfaces_the_nodes_rpc_error() {
+        // What Core sends back when the batch body is not a JSON array.
+        let raw = br#"{"result":null,"error":{"code":-32700,"message":"Parse error"},"id":null}"#;
+        match parse_batch_reply(500, raw, 1, 2) {
+            Err(Error::Rpc(e)) => assert_eq!(e.code, -32700),
+            other => panic!("expected Rpc error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn batch_2xx_that_is_not_an_array_is_a_json_error() {
+        assert!(matches!(
+            parse_batch_reply(200, br#"{"jsonrpc":"2.0","id":1,"result":true}"#, 1, 2),
+            Err(Error::Json(_))
+        ));
+        assert!(matches!(
+            parse_batch_reply(200, b"nope", 1, 2),
+            Err(Error::Json(_))
+        ));
+    }
+
+    #[test]
+    fn batch_http_failure_is_a_transport_error_naming_the_status() {
+        match parse_batch_reply(401, b"", 1, 2) {
+            Err(Error::Transport(m)) => assert!(m.contains("401"), "{m}"),
+            other => panic!("expected Transport error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn empty_batch_parses_to_nothing() {
+        assert!(parse_batch_reply(200, b"[]", 1, 0).unwrap().is_empty());
     }
 }

@@ -99,9 +99,51 @@ A long-polling call (`wait_for_new_block`, `wait_for_block_height`,
 long before the RPC-level wait it asked for. Build a separate client with
 `.read_timeout(None)` for those.
 
+## Batching
+
+Both transport traits can send several calls in one HTTP round trip as a
+JSON-RPC 2.0 batch. `call_batch` runs one method over many argument lists and
+types every result; `call_batch_raw` mixes methods and keeps each call's own
+`Result`, so one rejected call does not hide the others:
+
+```rust,no_run
+use bitcoin_rpc::prelude::sync::*;
+use serde_json::json;
+
+# fn main() -> bitcoin_rpc::Result<()> {
+let client = ClientBuilder::new("http://127.0.0.1:8332").build()?;
+
+// One request, one reply array, results in argument order.
+let hashes: Vec<String> = client.call_batch(
+    "getblockhash",
+    (800_000..800_010).map(|h| json!([h])).collect(),
+)?;
+
+// Per-call results, mixed methods.
+let results = client.call_batch_raw(&[
+    ("getblockcount", json!([])),
+    ("getblockhash", json!([u32::MAX])), // this one fails with Error::Rpc
+])?;
+assert!(results[0].is_ok());
+assert!(results[1].is_err());
+# let _ = hashes;
+# Ok(())
+# }
+```
+
+`BlockchainRpc::get_block_hashes` and `get_block_headers` are the two
+ready-made batched methods, for walking a range of the chain. Replies are
+matched to requests by id, never by position, and a reply array that answers
+an id twice, skips one, or has the wrong length fails the whole batch with
+`Error::Transport`.
+
+Extension traits over `RpcCall`/`RpcCallAsync` get batching for free: the
+trait's default `call_batch_raw` falls back to sequential calls, and the
+shipped clients override it with a real batch.
+
 ## Adding your own RPC
 
-This crate ships 44 typed methods (see [Scope](#scope) below) but not every
+This crate ships 56 typed methods (see [Scope](#scope) below) but not every
 RPC Bitcoin Core exposes. Reaching anything else — the wallet RPCs, the
 hidden/regtest-only RPCs, or a method a future Core release adds — means
 writing your own extension trait over `RpcCall` (sync) or `RpcCallAsync`
@@ -160,15 +202,17 @@ for the sync side by
 
 ## Scope
 
-54 typed methods across eight traits: `BlockchainRpc` (15),
+56 typed methods across eight traits: `BlockchainRpc` (17),
 `RawTransactionsRpc` (15), `NetworkRpc` (6), `MempoolRpc` (5), `MiningRpc` (5),
 `ControlRpc` (4), `UtilRpc` (3), `FeeRpc` (1) — over 48 distinct RPC commands.
-The surplus of 6 comes from four commands whose result shape depends on a
+The surplus of 8 comes from four commands whose result shape depends on a
 verbosity or mode argument, so each is split into a separate typed method: `getblock` (x3:
 `get_block_hex`, `get_block`, `get_block_with_txs`), `getrawmempool` (x3:
 `get_raw_mempool`, `get_raw_mempool_verbose`, `get_raw_mempool_with_sequence`),
 `getblockheader` (x2: `get_block_header`, `get_block_header_hex`), and
-`getrawtransaction` (x2: `get_raw_transaction`, `get_raw_transaction_hex`).
+`getrawtransaction` (x2: `get_raw_transaction`, `get_raw_transaction_hex`);
+plus the two batched forms `get_block_hashes` and `get_block_headers` (see
+[Batching](#batching)).
 
 `RawTransactionsRpc` covers the whole wallet-free PSBT family: `createpsbt`,
 `decodepsbt`, `analyzepsbt`, `finalizepsbt`, `descriptorprocesspsbt`,

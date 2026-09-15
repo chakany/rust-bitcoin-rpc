@@ -1116,3 +1116,179 @@ fn overall_timeout_still_applies_on_top_of_the_phase_timeouts() {
     ));
     assert!(started.elapsed() < std::time::Duration::from_secs(5));
 }
+
+#[test]
+fn batch_sends_one_request_with_consecutive_ids_and_returns_results_in_order() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"[{"jsonrpc":"2.0","id":1,"result":"h1"},{"jsonrpc":"2.0","id":2,"result":"h2"},{"jsonrpc":"2.0","id":3,"result":"h3"}]"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let results = client
+        .call_batch_raw(&[
+            ("getblockhash", json!([1])),
+            ("getblockhash", json!([2])),
+            ("getblockhash", json!([3])),
+        ])
+        .unwrap();
+    let values: Vec<&str> = results
+        .iter()
+        .map(|r| r.as_ref().unwrap().as_str().unwrap())
+        .collect();
+    assert_eq!(values, ["h1", "h2", "h3"]);
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1, "a batch is one HTTP request");
+    let sent: serde_json::Value = serde_json::from_str(&requests[0].body).unwrap();
+    let sent = sent.as_array().expect("batch body is a JSON array");
+    assert_eq!(sent.len(), 3);
+    for (i, req) in sent.iter().enumerate() {
+        assert_eq!(req["jsonrpc"], "2.0");
+        assert_eq!(req["id"], i as u64 + 1);
+        assert_eq!(req["method"], "getblockhash");
+        assert_eq!(req["params"], json!([i as u64 + 1]));
+    }
+}
+
+#[test]
+fn batch_replies_out_of_order_are_matched_by_id() {
+    let server = common::MockServer::spawn_verbatim(vec![(
+        200,
+        r#"[{"jsonrpc":"2.0","id":2,"result":"second"},{"jsonrpc":"2.0","id":1,"result":"first"}]"#
+            .to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let results = client
+        .call_batch_raw(&[("uptime", json!([])), ("uptime", json!([]))])
+        .unwrap();
+    assert_eq!(results[0].as_ref().unwrap(), "first");
+    assert_eq!(results[1].as_ref().unwrap(), "second");
+}
+
+#[test]
+fn batch_keeps_per_call_rpc_errors_in_place() {
+    let server = common::MockServer::spawn(vec![(
+        200,
+        r#"[{"jsonrpc":"2.0","id":1,"result":800000},{"jsonrpc":"2.0","id":2,"error":{"code":-8,"message":"Block height out of range"}}]"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let results = client
+        .call_batch_raw(&[
+            ("getblockcount", json!([])),
+            ("getblockhash", json!([u32::MAX])),
+        ])
+        .unwrap();
+    assert_eq!(results[0].as_ref().unwrap(), 800000);
+    match &results[1] {
+        Err(Error::Rpc(e)) => assert_eq!(e.code, -8),
+        other => panic!("expected Rpc error, got {other:?}"),
+    }
+}
+
+#[test]
+fn batch_with_a_missing_reply_fails_as_a_whole() {
+    let server = common::MockServer::spawn_verbatim(vec![(
+        200,
+        r#"[{"jsonrpc":"2.0","id":1,"result":true}]"#.to_string(),
+    )]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    assert!(matches!(
+        client.call_batch_raw(&[("uptime", json!([])), ("uptime", json!([]))]),
+        Err(Error::Transport(_))
+    ));
+}
+
+#[test]
+fn empty_batch_makes_no_request() {
+    let server = common::MockServer::spawn(vec![]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    assert!(client.call_batch_raw(&[]).unwrap().is_empty());
+    let none: Vec<u64> = client.call_batch("uptime", vec![]).unwrap();
+    assert!(none.is_empty());
+    assert!(server.requests().is_empty());
+}
+
+#[test]
+fn typed_batch_deserializes_every_result_and_fails_on_the_first_rpc_error() {
+    let server = common::MockServer::spawn(vec![
+        (
+            200,
+            r#"[{"jsonrpc":"2.0","id":1,"result":1},{"jsonrpc":"2.0","id":2,"result":2}]"#.to_string(),
+        ),
+        (
+            200,
+            r#"[{"jsonrpc":"2.0","id":3,"result":1},{"jsonrpc":"2.0","id":4,"error":{"code":-8,"message":"nope"}}]"#.to_string(),
+        ),
+    ]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    let ok: Vec<u64> = client
+        .call_batch("getblockcount", vec![json!([]), json!([])])
+        .unwrap();
+    assert_eq!(ok, [1, 2]);
+
+    match client.call_batch::<u64>("getblockcount", vec![json!([]), json!([])]) {
+        Err(Error::Rpc(e)) => assert_eq!(e.code, -8),
+        other => panic!("expected Rpc error, got {other:?}"),
+    }
+}
+
+#[test]
+fn ids_keep_counting_after_a_batch() {
+    let server = common::MockServer::spawn(vec![
+        (
+            200,
+            r#"[{"jsonrpc":"2.0","id":1,"result":1},{"jsonrpc":"2.0","id":2,"result":2}]"#
+                .to_string(),
+        ),
+        (200, r#"{"jsonrpc":"2.0","id":1,"result":3}"#.to_string()),
+    ]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    client
+        .call_batch_raw(&[("uptime", json!([])), ("uptime", json!([]))])
+        .unwrap();
+    client.call_raw("uptime", json!([])).unwrap();
+
+    let single: serde_json::Value = serde_json::from_str(&server.requests()[1].body).unwrap();
+    assert_eq!(single["id"], 3);
+}
+
+#[test]
+fn get_block_hashes_and_headers_are_batched() {
+    let server = common::MockServer::spawn(vec![
+        (
+            200,
+            r#"[{"jsonrpc":"2.0","id":1,"result":"aa"},{"jsonrpc":"2.0","id":2,"result":"bb"}]"#
+                .to_string(),
+        ),
+        (
+            200,
+            format!(
+                "[{},{}]",
+                r#"{"jsonrpc":"2.0","id":1,"result":{"hash":"aa","confirmations":2,"height":1,"version":1,"versionHex":"00000001","merkleroot":"m","time":1,"mediantime":1,"nonce":0,"bits":"1d00ffff","target":"t","difficulty":1.0,"chainwork":"c","nTx":1}}"#,
+                r#"{"jsonrpc":"2.0","id":2,"result":{"hash":"bb","confirmations":1,"height":2,"version":1,"versionHex":"00000001","merkleroot":"m","time":2,"mediantime":2,"nonce":0,"bits":"1d00ffff","target":"t","difficulty":1.0,"chainwork":"c","nTx":1}}"#
+            ),
+        ),
+    ]);
+    let client = ClientBuilder::new(server.url()).build().unwrap();
+
+    assert_eq!(client.get_block_hashes(&[1, 2]).unwrap(), ["aa", "bb"]);
+    let headers = client.get_block_headers(&["aa", "bb"]).unwrap();
+    assert_eq!(headers.len(), 2);
+    assert_eq!(headers[1].height, 2);
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 2);
+    let hashes: serde_json::Value = serde_json::from_str(&requests[0].body).unwrap();
+    assert_eq!(hashes[1]["method"], "getblockhash");
+    assert_eq!(hashes[1]["params"], json!([2]));
+    let headers: serde_json::Value = serde_json::from_str(&requests[1].body).unwrap();
+    assert_eq!(headers[0]["method"], "getblockheader");
+    assert_eq!(headers[0]["params"], json!(["aa", true]));
+}

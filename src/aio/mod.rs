@@ -11,18 +11,16 @@
 mod call;
 mod methods;
 
-pub use call::{RpcCallAsync, RpcCallAsyncExt};
+pub use call::{BoxFuture, RpcCallAsync, RpcCallAsyncExt};
 pub use methods::*;
 
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::jsonrpc::{Request, parse_reply};
+use crate::jsonrpc::{Request, parse_batch_reply, parse_reply};
 use crate::{Auth, Error, Result};
 
 /// Turn a `reqwest` failure into [`Error::Transport`], keeping the cause.
@@ -182,31 +180,62 @@ impl Client {
     }
 }
 
+impl Client {
+    /// Reserve `count` consecutive request ids, returning the first.
+    fn reserve_ids(&self, count: usize) -> u64 {
+        self.next_id.fetch_add(count as u64, Ordering::Relaxed)
+    }
+
+    /// POST `body` and return the status and (bounded) reply body.
+    async fn post(&self, body: String) -> Result<(u16, Vec<u8>)> {
+        let mut request = self
+            .http
+            .post(&self.url)
+            .header("Content-Type", "application/json")
+            .body(body);
+        if let Some(auth) = &self.authorization {
+            request = request.header("Authorization", auth);
+        }
+
+        // No `error_for_status`: a 500 still carries a usable error body.
+        let response = request.send().await.map_err(transport_error)?;
+        let status = response.status().as_u16();
+        let bytes = self.read_body(response).await?;
+        Ok((status, bytes))
+    }
+}
+
 impl RpcCallAsync for Client {
-    fn call_raw<'a>(
-        &'a self,
-        method: &'a str,
-        params: Value,
-    ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'a>> {
+    fn call_raw<'a>(&'a self, method: &'a str, params: Value) -> BoxFuture<'a, Value> {
         Box::pin(async move {
-            let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-            let body = serde_json::to_string(&Request::new(id, method, params))?;
-
-            let mut request = self
-                .http
-                .post(&self.url)
-                .header("Content-Type", "application/json")
-                .body(body);
-            if let Some(auth) = &self.authorization {
-                request = request.header("Authorization", auth);
-            }
-
-            // No `error_for_status`: a 500 still carries a usable error body.
-            let response = request.send().await.map_err(transport_error)?;
-            let status = response.status().as_u16();
-            let bytes = self.read_body(response).await?;
-
+            let id = self.reserve_ids(1);
+            let body = serde_json::to_string(&Request::new(id, method, &params))?;
+            let (status, bytes) = self.post(body).await?;
             parse_reply(status, &bytes, id)
+        })
+    }
+
+    /// One HTTP request carrying a JSON array of requests with consecutive
+    /// ids; the reply array is matched back up by those ids.
+    fn call_batch_raw<'a>(
+        &'a self,
+        calls: &'a [(&'a str, Value)],
+    ) -> BoxFuture<'a, Vec<Result<Value>>> {
+        Box::pin(async move {
+            if calls.is_empty() {
+                return Ok(Vec::new());
+            }
+            let first_id = self.reserve_ids(calls.len());
+            let requests: Vec<Request<'_>> = calls
+                .iter()
+                .enumerate()
+                .map(|(offset, (method, params))| {
+                    Request::new(first_id + offset as u64, method, params)
+                })
+                .collect();
+            let body = serde_json::to_string(&requests)?;
+            let (status, bytes) = self.post(body).await?;
+            parse_batch_reply(status, &bytes, first_id, calls.len())
         })
     }
 }
