@@ -7,8 +7,8 @@ use bitcoin_rpc::sync::{
     RawTransactionsRpc, RpcCall, RpcCallExt, UtilRpc,
 };
 use bitcoin_rpc::types::{
-    BlockTemplateRequest, CreateRawTransactionInput, CreateRawTransactionOutput, DerivedAddresses,
-    DescriptorRange, DescriptorRequest, SighashType,
+    Amount, BlockTemplateRequest, CreateRawTransactionInput, CreateRawTransactionOutput,
+    DerivedAddresses, DescriptorRange, DescriptorRequest, FeeRate, SighashType,
 };
 use bitcoin_rpc::{Auth, Error};
 use common::fixtures::{
@@ -206,7 +206,7 @@ fn get_block_with_txs_sends_verbosity_2_and_deserializes() {
     assert_eq!(block.coinbase_tx.sequence, 4294967295);
     assert_eq!(block.coinbase_tx.witness.as_deref(), Some("00"));
     assert_eq!(block.tx.len(), 1);
-    assert_eq!(block.tx[0].tx.fee, Some(0.00012345));
+    assert_eq!(block.tx[0].tx.fee, Some(Amount::from_sat(12_345)));
     // Reached through the `serde(flatten)`-ed transaction body.
     assert_eq!(block.tx[0].tx.vsize, 204);
     assert_eq!(block.tx[0].tx.vout[0].script_pub_key.script_type, "pubkey");
@@ -285,7 +285,7 @@ fn get_mempool_entry_sends_txid_and_deserializes() {
         .unwrap();
     assert_eq!(entry.vsize, 204);
     assert_eq!(entry.height, 800000);
-    assert_eq!(entry.fees.base, 0.00012345);
+    assert_eq!(entry.fees.base, Amount::from_sat(12_345));
     assert_eq!(entry.depends.len(), 1);
     assert!(entry.spent_by.is_empty());
     assert!(!entry.unbroadcast);
@@ -453,7 +453,7 @@ fn get_raw_transaction_sends_verbosity_1_and_deserializes() {
     assert_eq!(tx.vin[0].vout, Some(1));
     assert_eq!(tx.vin[0].script_sig.as_ref().unwrap().hex, "483045022100");
     assert_eq!(tx.vin[0].tx_in_witness.as_ref().unwrap().len(), 2);
-    assert_eq!(tx.vout[0].value, 0.04998);
+    assert_eq!(tx.vout[0].value, Amount::from_sat(4_998_000));
     assert_eq!(tx.vout[0].script_pub_key.script_type, "witness_v0_keyhash");
 
     let sent: serde_json::Value = serde_json::from_str(&server.requests()[0].body).unwrap();
@@ -482,7 +482,7 @@ fn create_raw_transaction_sends_both_output_forms() {
     let outputs = [
         CreateRawTransactionOutput::Address {
             address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
-            amount: 0.01,
+            amount: Amount::from_sat(1_000_000),
         },
         CreateRawTransactionOutput::Data("00010203".to_string()),
     ];
@@ -528,8 +528,8 @@ fn test_mempool_accept_deserializes_hyphenated_fee_keys() {
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].allowed, Some(true));
     let fees = results[0].fees.as_ref().unwrap();
-    assert_eq!(fees.base, 0.00001234);
-    assert_eq!(fees.effective_feerate, 0.00008567);
+    assert_eq!(fees.base, Amount::from_sat(1_234));
+    assert_eq!(fees.effective_feerate, FeeRate::from_sat_per_kvb(8_567));
     assert_eq!(fees.effective_includes.len(), 1);
     // Validation left unfinished by the first transaction: no `allowed` key.
     assert_eq!(results[1].allowed, None);
@@ -649,7 +649,7 @@ fn all_54_typed_methods_send_the_expected_wire_form() {
     }];
     let outputs = [CreateRawTransactionOutput::Address {
         address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
-        amount: 0.01,
+        amount: Amount::from_sat(1_000_000),
     }];
     let raw_txs = ["0200000001abcdef".to_string()];
     let request = BlockTemplateRequest::default();
@@ -695,10 +695,14 @@ fn all_54_typed_methods_send_the_expected_wire_form() {
     let _ = client.get_network_hash_ps(Some(120), Some(-1));
     let _ = client.get_raw_transaction_hex("txid1", Some("bh1"));
     let _ = client.get_raw_transaction("txid1", Some("bh1"));
-    let _ = client.send_raw_transaction("hex1", Some(0.1), Some(0.01));
+    let _ = client.send_raw_transaction(
+        "hex1",
+        Some(FeeRate::from_sat_per_kvb(10_000_000)),
+        Some(Amount::from_sat(1_000_000)),
+    );
     let _ = client.create_raw_transaction(&inputs, &outputs, Some(800000), Some(true), Some(2));
     let _ = client.decode_raw_transaction("hex1", Some(true));
-    let _ = client.test_mempool_accept(&raw_txs, Some(0.5));
+    let _ = client.test_mempool_accept(&raw_txs, Some(FeeRate::from_sat_per_kvb(50_000_000)));
     let _ = client.estimate_smart_fee(6, Some("conservative"));
     let _ = client.uptime();
     let _ = client.stop();

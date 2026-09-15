@@ -4,6 +4,8 @@
 //! Bitcoin Core v31.1. No struct rejects unknown fields, so a newer node adding
 //! a field does not break deserialization.
 
+use super::amount::{Amount, FeeRate};
+
 /// Result of `getmempoolinfo`.
 ///
 /// `fullrbf` is omitted: Core always sends it as `true` and documents it as
@@ -21,23 +23,22 @@ pub struct MempoolInfo {
     pub bytes: u64,
     /// Total memory usage for the mempool.
     pub usage: u64,
-    /// Total fees for the mempool in BTC, ignoring modified fees through
+    /// Total fees for the mempool, ignoring modified fees through
     /// prioritisetransaction.
-    pub total_fee: f64,
+    pub total_fee: Amount,
     /// Maximum memory usage for the mempool.
     #[cfg_attr(feature = "serde", serde(rename = "maxmempool"))]
     pub max_mempool: u64,
-    /// Minimum fee rate in BTC/kvB for tx to be accepted. Is the maximum of
+    /// Minimum fee rate for tx to be accepted. Is the maximum of
     /// minrelaytxfee and minimum mempool fee.
     #[cfg_attr(feature = "serde", serde(rename = "mempoolminfee"))]
-    pub mempool_min_fee: f64,
-    /// Current minimum relay fee for transactions.
+    pub mempool_min_fee: FeeRate,
+    /// Current minimum relay fee rate for transactions.
     #[cfg_attr(feature = "serde", serde(rename = "minrelaytxfee"))]
-    pub min_relay_tx_fee: f64,
-    /// Minimum fee rate increment for mempool limiting or replacement, in
-    /// BTC/kvB.
+    pub min_relay_tx_fee: FeeRate,
+    /// Minimum fee rate increment for mempool limiting or replacement.
     #[cfg_attr(feature = "serde", serde(rename = "incrementalrelayfee"))]
-    pub incremental_relay_fee: f64,
+    pub incremental_relay_fee: FeeRate,
     /// Current number of transactions that haven't passed initial broadcast
     /// yet.
     #[cfg_attr(feature = "serde", serde(rename = "unbroadcastcount"))]
@@ -61,23 +62,22 @@ pub struct MempoolInfo {
     pub optimal: bool,
 }
 
-/// Per-fee-context breakdown of a mempool entry's fees, all denominated in
-/// BTC.
+/// Per-fee-context breakdown of a mempool entry's fees.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MempoolEntryFees {
     /// Transaction fee.
-    pub base: f64,
+    pub base: Amount,
     /// Transaction fee with fee deltas used for mining priority.
-    pub modified: f64,
+    pub modified: Amount,
     /// Transaction fees of in-mempool ancestors (including this one) with fee
     /// deltas used for mining priority.
-    pub ancestor: f64,
+    pub ancestor: Amount,
     /// Transaction fees of in-mempool descendants (including this one) with
     /// fee deltas used for mining priority.
-    pub descendant: f64,
+    pub descendant: Amount,
     /// Transaction fees of the chunk.
-    pub chunk: f64,
+    pub chunk: Amount,
 }
 
 /// Mempool data for a single transaction, as returned by `getmempoolentry` and

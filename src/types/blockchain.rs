@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 
+use super::amount::Amount;
 use super::rawtx::{ScriptPubKey, Transaction};
 
 /// Result of `getblockchaininfo`.
@@ -387,8 +388,8 @@ pub struct TxOut {
     pub best_block: String,
     /// The number of confirmations.
     pub confirmations: i64,
-    /// The transaction value in BTC.
-    pub value: f64,
+    /// The transaction value.
+    pub value: Amount,
     /// The output script.
     #[cfg_attr(feature = "serde", serde(rename = "scriptPubKey"))]
     pub script_pub_key: ScriptPubKey,

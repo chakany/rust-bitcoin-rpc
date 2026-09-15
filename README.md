@@ -220,6 +220,13 @@ plus the two batched forms `get_block_hashes` and `get_block_headers` (see
 `deriveaddresses` on `UtilRpc`. `decodepsbt`'s result is modelled in full,
 including the Taproot fields and the BIP 373 MuSig2 fields added in v31.
 
+Every BTC-denominated field is an `Amount` (whole satoshis) and every fee rate
+a `FeeRate` (satoshis per kvB), never an `f64`. Both convert to and from the
+eight-decimal JSON number Core puts on the wire exactly, so a value read from
+the node and sent back is byte-for-byte what the node emitted, and
+`Amount::from_btc(0.1 + 0.2)` is an error rather than a silently wrong
+`0.30000000000000004` for Core to reject. Do arithmetic in satoshis.
+
 Not covered, deliberately:
 
 - No wallet RPCs (everything under Bitcoin Core's `wallet` category).

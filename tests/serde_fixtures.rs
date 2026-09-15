@@ -240,7 +240,7 @@ fn block_with_txs_full() {
     // `fee` is a JSON number even though Core documents it as STR_AMOUNT.
     // Reached *through* the flattened `tx`: proves `serde(flatten)` really
     // routes the sibling keys into `Transaction` instead of dropping them.
-    assert_eq!(block.tx[0].tx.fee, Some(0.00012345));
+    assert_eq!(block.tx[0].tx.fee, Some(Amount::from_sat(12_345)));
     assert_eq!(
         block.tx[0].tx.txid,
         "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"
@@ -250,7 +250,10 @@ fn block_with_txs_full() {
         block.tx[0].tx.vin[0].coinbase.as_deref(),
         Some("04ffff001d0102")
     );
-    assert_eq!(block.tx[0].tx.vout[0].value, 50.0);
+    assert_eq!(
+        block.tx[0].tx.vout[0].value,
+        Amount::from_sat(5_000_000_000)
+    );
     assert_eq!(block.tx[0].tx.vout[0].script_pub_key.script_type, "pubkey");
     // `getblock` calls `TxToUniv` with a null block hash, so no block context.
     assert_eq!(block.tx[0].tx.block_hash, None);
@@ -419,7 +422,7 @@ fn tx_out_full() {
     let out: TxOut = serde_json::from_value(v).unwrap();
     assert_eq!(out.confirmations, 42);
     // STR_AMOUNT is an unquoted JSON number, hence f64.
-    assert_eq!(out.value, 0.00012345);
+    assert_eq!(out.value, Amount::from_sat(12_345));
     assert_eq!(out.script_pub_key.script_type, "pubkeyhash");
     assert_eq!(out.script_pub_key.hex, "76a914000088ac");
     assert_eq!(
@@ -448,7 +451,7 @@ fn tx_out_minimal_and_forward_compatible() {
     });
     let out: TxOut = serde_json::from_value(v).unwrap();
     assert_eq!(out.confirmations, 0);
-    assert_eq!(out.value, 50.0);
+    assert_eq!(out.value, Amount::from_sat(5_000_000_000));
     assert_eq!(out.script_pub_key.address, None);
     assert!(!out.coinbase);
 }
@@ -499,11 +502,11 @@ fn get_mempool_info_full() {
     assert_eq!(info.bytes, 45000);
     assert_eq!(info.usage, 987654);
     // STR_AMOUNT is an unquoted JSON number, hence f64.
-    assert_eq!(info.total_fee, 0.01234567);
+    assert_eq!(info.total_fee, Amount::from_sat(1_234_567));
     assert_eq!(info.max_mempool, 300000000);
-    assert_eq!(info.mempool_min_fee, 0.00001000);
-    assert_eq!(info.min_relay_tx_fee, 0.00001000);
-    assert_eq!(info.incremental_relay_fee, 0.00001000);
+    assert_eq!(info.mempool_min_fee, FeeRate::from_sat_per_kvb(1_000));
+    assert_eq!(info.min_relay_tx_fee, FeeRate::from_sat_per_kvb(1_000));
+    assert_eq!(info.incremental_relay_fee, FeeRate::from_sat_per_kvb(1_000));
     assert_eq!(info.unbroadcast_count, 3);
     assert!(info.permit_bare_multisig);
     assert_eq!(info.max_datacarrier_size, 83);
@@ -568,11 +571,11 @@ fn mempool_entry_full() {
         "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"
     );
     // STR_AMOUNT fields are unquoted JSON numbers, hence f64.
-    assert_eq!(entry.fees.base, 0.00012345);
-    assert_eq!(entry.fees.modified, 0.00012400);
-    assert_eq!(entry.fees.ancestor, 0.00012345);
-    assert_eq!(entry.fees.descendant, 0.00024690);
-    assert_eq!(entry.fees.chunk, 0.00012345);
+    assert_eq!(entry.fees.base, Amount::from_sat(12_345));
+    assert_eq!(entry.fees.modified, Amount::from_sat(12_400));
+    assert_eq!(entry.fees.ancestor, Amount::from_sat(12_345));
+    assert_eq!(entry.fees.descendant, Amount::from_sat(24_690));
+    assert_eq!(entry.fees.chunk, Amount::from_sat(12_345));
     assert_eq!(entry.depends.len(), 1);
     assert_eq!(entry.spent_by.len(), 1);
     assert!(!entry.unbroadcast);
@@ -603,7 +606,7 @@ fn mempool_entry_minimal_and_forward_compatible() {
     assert!(entry.depends.is_empty());
     assert!(entry.spent_by.is_empty());
     assert!(entry.unbroadcast);
-    assert_eq!(entry.fees.base, 0.0);
+    assert_eq!(entry.fees.base, Amount::ZERO);
 }
 
 #[test]
@@ -664,8 +667,8 @@ fn get_network_info_full() {
     assert_eq!(info.networks[1].proxy, "127.0.0.1:9050");
     assert!(info.networks[1].proxy_randomize_credentials);
     // relayfee/incrementalfee are plain NUM in net.cpp, not STR_AMOUNT, but still f64.
-    assert_eq!(info.relay_fee, 0.00001000);
-    assert_eq!(info.incremental_fee, 0.00001000);
+    assert_eq!(info.relay_fee, FeeRate::from_sat_per_kvb(1_000));
+    assert_eq!(info.incremental_fee, FeeRate::from_sat_per_kvb(1_000));
     assert_eq!(info.local_addresses.len(), 1);
     assert_eq!(info.local_addresses[0].address, "1.2.3.4");
     assert_eq!(info.local_addresses[0].port, 8333);
@@ -770,7 +773,7 @@ fn peer_info_full() {
     assert_eq!(peer.addr_processed, 100);
     assert_eq!(peer.addr_rate_limited, 2);
     assert_eq!(peer.permissions, vec!["noban"]);
-    assert_eq!(peer.min_fee_filter, 0.00001000);
+    assert_eq!(peer.min_fee_filter, FeeRate::from_sat_per_kvb(1_000));
     assert_eq!(peer.bytes_sent_per_msg.get("ping"), Some(&32));
     assert_eq!(peer.bytes_recv_per_msg.get("pong"), Some(&32));
     assert_eq!(peer.connection_type, "outbound-full-relay");
@@ -867,7 +870,7 @@ fn get_mining_info_full() {
     assert_eq!(info.network_hash_ps, 350000000000000000000.0);
     assert_eq!(info.pooled_tx, 120);
     // blockmintxfee is the one STR_AMOUNT in mining.cpp: an unquoted JSON number.
-    assert_eq!(info.block_min_tx_fee, 0.00001000);
+    assert_eq!(info.block_min_tx_fee, FeeRate::from_sat_per_kvb(1_000));
     assert_eq!(info.chain, "main");
     assert_eq!(info.signet_challenge.as_deref(), Some("51"));
     assert_eq!(info.next.height, 800001);
@@ -1100,7 +1103,7 @@ fn transaction_verbose_full() {
     assert_eq!(tx.block_time, Some(1690000000));
     assert_eq!(tx.hex.as_deref(), Some("0200000001abcdef"));
     // Only present at verbosity 2, and only with undo data available.
-    assert_eq!(tx.fee, Some(0.00012345));
+    assert_eq!(tx.fee, Some(Amount::from_sat(12_345)));
 
     assert_eq!(tx.vin.len(), 1);
     let vin = &tx.vin[0];
@@ -1119,11 +1122,11 @@ fn transaction_verbose_full() {
     assert!(!prevout.generated);
     assert_eq!(prevout.height, 799999);
     // `value` goes through `ValueFromAmount`, so it arrives as a JSON number.
-    assert_eq!(prevout.value, 0.05);
+    assert_eq!(prevout.value, Amount::from_sat(5_000_000));
     assert_eq!(prevout.script_pub_key.script_type, "witness_v0_keyhash");
 
     assert_eq!(tx.vout.len(), 1);
-    assert_eq!(tx.vout[0].value, 0.04998);
+    assert_eq!(tx.vout[0].value, Amount::from_sat(4_998_000));
     assert_eq!(tx.vout[0].n, 0);
     assert_eq!(tx.vout[0].script_pub_key.script_type, "pubkeyhash");
     assert_eq!(
@@ -1174,7 +1177,7 @@ fn transaction_minimal_and_forward_compatible() {
     assert_eq!(tx.vin[0].script_sig, None);
     assert_eq!(tx.vin[0].tx_in_witness, None);
     assert_eq!(tx.vin[0].prevout, None);
-    assert_eq!(tx.vout[0].value, 50.0);
+    assert_eq!(tx.vout[0].value, Amount::from_sat(5_000_000_000));
     assert_eq!(tx.vout[0].script_pub_key.script_type, "pubkey");
     assert_eq!(tx.vout[0].script_pub_key.address, None);
 }
@@ -1209,8 +1212,8 @@ fn test_mempool_accept_result_full() {
     assert!(result.reject_details.is_some());
     let fees = result.fees.as_ref().unwrap();
     // Both are STR_AMOUNT, i.e. JSON numbers.
-    assert_eq!(fees.base, 0.00001234);
-    assert_eq!(fees.effective_feerate, 0.00008567);
+    assert_eq!(fees.base, Amount::from_sat(1_234));
+    assert_eq!(fees.effective_feerate, FeeRate::from_sat_per_kvb(8_567));
     assert_eq!(fees.effective_includes.len(), 1);
     assert_eq!(
         fees.effective_includes[0],
@@ -1273,7 +1276,7 @@ fn create_raw_transaction_input_omits_an_absent_sequence() {
 fn create_raw_transaction_output_serializes_the_address_as_the_key() {
     let pay = CreateRawTransactionOutput::Address {
         address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
-        amount: 0.01,
+        amount: Amount::from_sat(1_000_000),
     };
     assert_eq!(
         serde_json::to_value(&pay).unwrap(),
@@ -1295,7 +1298,7 @@ fn estimate_smart_fee_full() {
         "blocks": 6
     });
     let est: FeeEstimate = serde_json::from_value(v).unwrap();
-    assert_eq!(est.feerate, Some(0.00001200));
+    assert_eq!(est.feerate, Some(FeeRate::from_sat_per_kvb(1_200)));
     assert_eq!(est.errors, Some(vec!["some warning".to_string()]));
     assert_eq!(est.blocks, 6);
 }
@@ -1471,8 +1474,11 @@ fn psbt_analysis_full() {
         Some("4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a")
     );
     assert_eq!(a.estimated_vsize, Some(110));
-    assert_eq!(a.estimated_feerate, Some(90.9090909));
-    assert_eq!(a.fee, Some(10.0));
+    assert_eq!(
+        a.estimated_feerate,
+        Some(FeeRate::from_sat_per_kvb(9_090_909_090))
+    );
+    assert_eq!(a.fee, Some(Amount::from_sat(1_000_000_000)));
     assert_eq!(a.next, "signer");
     assert!(a.error.is_some());
 }
@@ -1504,7 +1510,7 @@ fn psbt_analysis_stages_from_a_live_node() {
         "next": "updater"
     }))
     .unwrap();
-    assert_eq!(updated.fee, Some(10.0));
+    assert_eq!(updated.fee, Some(Amount::from_sat(1_000_000_000)));
     // Only `pubkeys` is missing; the other three members stay absent.
     let missing = updated.inputs.as_ref().unwrap()[0]
         .missing
@@ -1741,7 +1747,7 @@ fn psbt_decoded_full() {
     let p: PsbtDecoded = serde_json::from_value(v).unwrap();
 
     assert_eq!(p.psbt_version, 0);
-    assert_eq!(p.fee, Some(0.0001));
+    assert_eq!(p.fee, Some(Amount::from_sat(10_000)));
     assert_eq!(p.tx.version, 2);
     assert_eq!(p.global_xpubs.len(), 1);
     assert_eq!(p.global_xpubs[0].master_fingerprint, "b5da67b1");
@@ -1752,7 +1758,7 @@ fn psbt_decoded_full() {
     let i = &p.inputs[0];
     assert_eq!(i.non_witness_utxo.as_ref().unwrap().version, 1);
     let witness_utxo = i.witness_utxo.as_ref().unwrap();
-    assert_eq!(witness_utxo.amount, 0.5);
+    assert_eq!(witness_utxo.amount, Amount::from_sat(50_000_000));
     assert_eq!(
         witness_utxo.script_pub_key.script_type,
         "witness_v0_keyhash"
