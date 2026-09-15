@@ -6,7 +6,7 @@
 //! eight decimals with `RPC_TYPE_ERROR`. Holding such a value in an `f64`
 //! invites two mistakes: arithmetic on it accumulates binary rounding error
 //! that Core then rejects, and comparing two of them for equality is
-//! unreliable. [`Amount`] and [`FeeRate`] hold whole satoshis instead and
+//! unreliable. [`Amount`], [`SignedAmount`] and [`FeeRate`] hold whole satoshis instead and
 //! convert to and from Core's decimal form exactly.
 //!
 //! The conversion is exact because of the ranges involved: every amount
@@ -17,21 +17,19 @@
 
 use std::fmt;
 
-/// Why an `f64` or a JSON number could not become an [`Amount`].
+/// Why an `f64` or a JSON number could not become an amount.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ParseAmountError {
     /// The value was NaN or infinite.
     NotFinite,
-    /// The value was below zero. Every amount this crate carries is
-    /// non-negative; Core reports fee deltas, the one signed quantity, from
-    /// RPCs this crate does not type.
+    /// The value was below zero for an unsigned amount.
     Negative,
     /// The value had more than eight decimal places, so it does not denote a
     /// whole number of satoshis. Typically a sign of `f64` arithmetic
     /// upstream (`0.1 + 0.2`); build the value in satoshis instead.
     TooPrecise,
-    /// The value exceeded 21 million BTC.
+    /// The absolute value exceeded 21 million BTC.
     TooLarge,
 }
 
@@ -43,7 +41,7 @@ impl fmt::Display for ParseAmountError {
             ParseAmountError::TooPrecise => {
                 write!(f, "amount has more than 8 decimal places")
             }
-            ParseAmountError::TooLarge => write!(f, "amount exceeds 21 million BTC"),
+            ParseAmountError::TooLarge => write!(f, "amount magnitude exceeds 21 million BTC"),
         }
     }
 }
@@ -122,6 +120,60 @@ impl fmt::Display for Amount {
     /// `0.00012345`, `50.00000000`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}.{:08}", self.0 / 100_000_000, self.0 % 100_000_000)
+    }
+}
+
+/// A signed bitcoin amount, held as whole satoshis.
+///
+/// Used for mempool fees that include mining priority deltas and can therefore
+/// be negative. The BTC conversion accepts magnitudes up to
+/// [`Amount::MAX_MONEY`], with the same exact decimal conversion as [`Amount`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SignedAmount(i64);
+
+impl SignedAmount {
+    /// Zero satoshis.
+    pub const ZERO: SignedAmount = SignedAmount(0);
+
+    /// An amount of `sat` satoshis.
+    pub const fn from_sat(sat: i64) -> SignedAmount {
+        SignedAmount(sat)
+    }
+
+    /// The amount in satoshis.
+    pub const fn to_sat(self) -> i64 {
+        self.0
+    }
+
+    /// An amount from BTC, rejecting non-finite values, fractional satoshis,
+    /// and magnitudes above [`Amount::MAX_MONEY`].
+    pub fn from_btc(btc: f64) -> Result<SignedAmount, ParseAmountError> {
+        let magnitude = btc_to_sat(btc.abs())? as i64;
+        Ok(SignedAmount(if btc.is_sign_negative() {
+            -magnitude
+        } else {
+            magnitude
+        }))
+    }
+
+    /// The nearest BTC `f64`; use satoshis for arithmetic.
+    pub fn to_btc(self) -> f64 {
+        self.0 as f64 / 100_000_000.0
+    }
+}
+
+impl fmt::Display for SignedAmount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.0 < 0 {
+            f.write_str("-")?;
+        }
+        let magnitude = self.0.unsigned_abs();
+        write!(
+            f,
+            "{}.{:08}",
+            magnitude / 100_000_000,
+            magnitude % 100_000_000
+        )
     }
 }
 
@@ -229,7 +281,7 @@ fn btc_to_sat(btc: f64) -> Result<u64, ParseAmountError> {
 
 #[cfg(feature = "serde")]
 mod serde_impls {
-    use super::{Amount, FeeRate, btc_to_sat};
+    use super::{Amount, FeeRate, SignedAmount, btc_to_sat};
     use serde::de::Error as _;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -244,6 +296,18 @@ mod serde_impls {
             btc_to_sat(f64::deserialize(d)?)
                 .map(Amount)
                 .map_err(D::Error::custom)
+        }
+    }
+
+    impl Serialize for SignedAmount {
+        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            s.serialize_f64(self.to_btc())
+        }
+    }
+
+    impl<'de> Deserialize<'de> for SignedAmount {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<SignedAmount, D::Error> {
+            SignedAmount::from_btc(f64::deserialize(d)?).map_err(D::Error::custom)
         }
     }
 
@@ -322,6 +386,42 @@ mod tests {
         assert_eq!(Amount::from_sat(5_000_000_000).to_string(), "50.00000000");
         assert_eq!(Amount::ZERO.to_string(), "0.00000000");
         assert_eq!(FeeRate::from_sat_per_kvb(1_000).to_string(), "0.00001000");
+    }
+
+    #[test]
+    fn signed_amount_conversion_and_display() {
+        for sat in [
+            -2_100_000_000_000_000,
+            -12_345,
+            -1,
+            0,
+            1,
+            12_345,
+            2_100_000_000_000_000,
+        ] {
+            let amount = SignedAmount::from_sat(sat);
+            assert_eq!(SignedAmount::from_btc(amount.to_btc()), Ok(amount));
+        }
+        assert_eq!(SignedAmount::from_btc(-0.0), Ok(SignedAmount::ZERO));
+        assert_eq!(SignedAmount::from_sat(-1).to_string(), "-0.00000001");
+        assert_eq!(
+            SignedAmount::from_sat(i64::MIN).to_string(),
+            "-92233720368.54775808"
+        );
+        for btc in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                SignedAmount::from_btc(btc),
+                Err(ParseAmountError::NotFinite)
+            );
+        }
+        assert_eq!(
+            SignedAmount::from_btc(-0.000000001),
+            Err(ParseAmountError::TooPrecise)
+        );
+        assert_eq!(
+            SignedAmount::from_btc(-21_000_001.0),
+            Err(ParseAmountError::TooLarge)
+        );
     }
 
     #[test]
@@ -424,6 +524,21 @@ mod tests {
                 serde_json::to_string(&FeeRate::from_sat_per_kvb(1_000)).unwrap(),
                 "0.00001"
             );
+        }
+
+        #[test]
+        fn signed_wire_round_trip_is_lossless_at_the_edges() {
+            for magnitude in
+                (Amount::MAX_MONEY.to_sat() - 1_000..=Amount::MAX_MONEY.to_sat()).chain(0..1_000)
+            {
+                for sign in [-1, 1] {
+                    let amount = SignedAmount::from_sat(sign * magnitude as i64);
+                    let wire = serde_json::to_string(&amount).unwrap();
+                    assert_eq!(serde_json::from_str::<SignedAmount>(&wire).unwrap(), amount);
+                }
+            }
+            assert!(serde_json::from_str::<SignedAmount>("-0.000000001").is_err());
+            assert!(serde_json::from_str::<SignedAmount>(r#""-0.1""#).is_err());
         }
 
         #[test]

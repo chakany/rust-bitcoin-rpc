@@ -4,7 +4,7 @@
 //! Bitcoin Core v31.1. No struct rejects unknown fields, so a newer node adding
 //! a field does not break deserialization.
 
-use super::amount::{Amount, FeeRate};
+use super::amount::{Amount, FeeRate, SignedAmount};
 
 /// Result of `getmempoolinfo`.
 ///
@@ -79,19 +79,19 @@ pub struct MempoolInfo {
 pub struct MempoolEntryFees {
     /// Transaction fee.
     pub base: Amount,
-    /// Transaction fee with fee deltas used for mining priority.
-    pub modified: Amount,
+    /// Transaction fee with fee deltas used for mining priority; may be negative.
+    pub modified: SignedAmount,
     /// Transaction fees of in-mempool ancestors (including this one) with fee
     /// deltas used for mining priority.
-    pub ancestor: Amount,
+    pub ancestor: SignedAmount,
     /// Transaction fees of in-mempool descendants (including this one) with
     /// fee deltas used for mining priority.
-    pub descendant: Amount,
-    /// Transaction fees of the chunk.
+    pub descendant: SignedAmount,
+    /// Transaction fees of the chunk, including mining priority deltas.
     ///
     /// Absent from nodes before Bitcoin Core v31, so `None` there.
     #[cfg_attr(feature = "serde", serde(default))]
-    pub chunk: Option<Amount>,
+    pub chunk: Option<SignedAmount>,
 }
 
 /// Mempool data for a single transaction, as returned by `getmempoolentry` and

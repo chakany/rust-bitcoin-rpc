@@ -576,15 +576,60 @@ fn mempool_entry_full() {
         entry.wtxid,
         "2d05f0c9c3e1c226e63b5fac240137687544cf631cd616fd34fd188fc9020866"
     );
-    // STR_AMOUNT fields are unquoted JSON numbers, hence f64.
+    // BTC wire numbers are held as exact satoshi amounts.
     assert_eq!(entry.fees.base, Amount::from_sat(12_345));
-    assert_eq!(entry.fees.modified, Amount::from_sat(12_400));
-    assert_eq!(entry.fees.ancestor, Amount::from_sat(12_345));
-    assert_eq!(entry.fees.descendant, Amount::from_sat(24_690));
-    assert_eq!(entry.fees.chunk, Some(Amount::from_sat(12_345)));
+    assert_eq!(entry.fees.modified, SignedAmount::from_sat(12_400));
+    assert_eq!(entry.fees.ancestor, SignedAmount::from_sat(12_345));
+    assert_eq!(entry.fees.descendant, SignedAmount::from_sat(24_690));
+    assert_eq!(entry.fees.chunk, Some(SignedAmount::from_sat(12_345)));
     assert_eq!(entry.depends.len(), 1);
     assert_eq!(entry.spent_by.len(), 1);
     assert!(!entry.unbroadcast);
+}
+
+#[test]
+fn mempool_entry_negative_priority_delta() {
+    // An isolated transaction paying 12,345 sat with a -20,000 sat delta.
+    let v = json!({
+        "vsize": 204, "weight": 816, "time": 1690000000, "height": 800000,
+        "descendantcount": 1, "descendantsize": 204,
+        "ancestorcount": 1, "ancestorsize": 204,
+        "chunkweight": 816, "wtxid": "txid",
+        "fees": {
+            "base": 0.00012345, "modified": -0.00007655,
+            "ancestor": -0.00007655, "descendant": -0.00007655,
+            "chunk": -0.00007655
+        },
+        "depends": [], "spentby": [], "unbroadcast": false
+    });
+    for has_chunk in [true, false] {
+        let mut wire = v.clone();
+        if !has_chunk {
+            wire.as_object_mut().unwrap().remove("chunkweight");
+            wire["fees"].as_object_mut().unwrap().remove("chunk");
+        }
+        let entry: MempoolEntry = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(entry.fees.base.to_sat(), 12_345);
+        assert_eq!(entry.fees.modified.to_sat(), -7_655);
+        assert_eq!(entry.fees.ancestor.to_sat(), -7_655);
+        assert_eq!(entry.fees.descendant.to_sat(), -7_655);
+        assert_eq!(
+            entry.fees.chunk.map(SignedAmount::to_sat),
+            has_chunk.then_some(-7_655)
+        );
+        let entries: std::collections::HashMap<String, MempoolEntry> =
+            serde_json::from_value(json!({"txid": wire})).unwrap();
+        assert_eq!(entries["txid"], entry);
+        let encoded = serde_json::to_value(&entry).unwrap();
+        assert_eq!(encoded["fees"]["modified"], json!(-0.00007655));
+        assert_eq!(
+            serde_json::from_value::<MempoolEntry>(encoded).unwrap(),
+            entry
+        );
+    }
+    let mut invalid = v;
+    invalid["fees"]["base"] = json!(-0.00000001);
+    assert!(serde_json::from_value::<MempoolEntry>(invalid).is_err());
 }
 
 #[test]
